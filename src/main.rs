@@ -17,6 +17,8 @@ use clap::{App, Arg};
 use colored::*;
 use serde::export::Formatter;
 
+mod unit_test;
+
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum TestCaseKind {
     UnitTest,
@@ -166,8 +168,8 @@ impl TestResult {
     }
 }
 
-trait Generatable {
-    fn generate(&self) -> Result<TestResult, GenerationError>;
+trait Test {
+    fn run(&self) -> Result<TestResult, GenerationError>;
     fn from_saved_tc(
         number: i32,
         testcase: &SavedTestcase,
@@ -194,7 +196,7 @@ pub fn percentage_from_levenstein(steps: i32, source: &String, target: &String) 
 
 #[allow(dead_code)]
 pub struct TestCaseGenerator {
-    test_cases: Vec<Box<dyn Generatable + Send + Sync>>,
+    test_cases: Vec<Box<dyn Test + Send + Sync>>,
     test_results: Vec<TestResult>,
     binary: Binary,
     config: TestDefinition,
@@ -245,6 +247,7 @@ impl TestCaseGenerator {
         }
         return Ok(());
     }
+
     pub fn run_generateables(&mut self) -> Result<(), GenerationError> {
         if !self.binary.compile().is_ok() {
             println!("could not compile binary, no tests were run");
@@ -254,7 +257,7 @@ impl TestCaseGenerator {
         self.test_results = self
             .test_cases
             .iter()
-            .map(|tc| match tc.generate() {
+            .map(|tc| match tc.run() {
                 Ok(tr) => Some(tr),
                 Err(e) => {
                     println!("Error running testcase: {}", e);
@@ -429,8 +432,13 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
     }
 }
 
-impl Generatable for UnitTest {
-    fn generate(&self) -> Result<TestResult, GenerationError> {
+impl Test for UnitTest {
+    fn run(&self) -> Result<TestResult, GenerationError> {
+        if let Err(e) = unit_test::run(self) {
+            println!("Error running unit test: {}", e);
+            return Err(GenerationError::ConfigErrorUnit);
+        }
+
         Ok(TestResult {
             distance_percentage: None,
             compile_warnings: None,
@@ -456,19 +464,15 @@ impl Generatable for UnitTest {
     ) -> Result<Self, GenerationError> {
         let retvar = UnitTest {
             meta: TestMeta {
-                number: number,
+                number,
                 name: testcase.name.clone(),
                 desc: testcase.description.clone(),
+                timeout: testcase.timeout,
                 projdata: projdata.clone(),
                 kind: TestCaseKind::UnitTest,
-                timeout: testcase.timeout,
             },
+            fname: testcase.fname.as_ref().unwrap_or(&String::new()).clone(),
             argv: testcase.args.as_ref().unwrap_or(&String::new()).clone(),
-            fname: testcase
-                .tags
-                .as_ref()
-                .map(|t| t.fname.clone())
-                .unwrap_or(String::new()),
             subname: testcase
                 .subname
                 .as_ref()
@@ -537,8 +541,8 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32
     return Err(ExecuteError::Timeout);
 }
 
-impl Generatable for IoTest {
-    fn generate(&self) -> Result<TestResult, GenerationError> {
+impl Test for IoTest {
+    fn run(&self) -> Result<TestResult, GenerationError> {
         println!("starting testcase {}", self.meta.name);
         // project name is the binary name
         // argvs
@@ -695,7 +699,7 @@ impl Generatable for IoTest {
             diff: Some(diff),
             compile_warnings: None,
             implemented: None,
-            passed: passed,
+            passed,
             result: given_output.0.clone(),
             ret: status,
             exp_ret: self.exp_retvar,
@@ -728,7 +732,7 @@ impl Generatable for IoTest {
         };
         let meta = TestMeta {
             kind: TestCaseKind::IOTest,
-            number: number,
+            number,
             name: testcase.name.clone(),
             desc: testcase.description.clone(),
             projdata: projdata.clone(),
@@ -736,7 +740,7 @@ impl Generatable for IoTest {
         };
 
         let retvar = IoTest {
-            meta: meta,
+            meta,
             binary: binary.unwrap().clone(),
             exp_retvar: testcase.exp_retvar,
             argv: testcase.args.as_ref().unwrap_or(&String::new()).clone(),
@@ -783,6 +787,7 @@ pub enum GenerationError {
     VgLogNotFound,
     VgLogParseError,
     CouldNotMakeBinary,
+    ConfigErrorUnit,
 }
 
 impl std::fmt::Display for GenerationError {
@@ -798,6 +803,7 @@ impl std::fmt::Display for GenerationError {
                 GenerationError::VgLogNotFound => "VgLogNotFound".to_string(),
                 GenerationError::VgLogParseError => "VgLogParseError".to_string(),
                 GenerationError::CouldNotMakeBinary => "CouldNotMakeBinary".to_string(),
+                GenerationError::ConfigErrorUnit => "ConfigErrorUnit".to_string()
             }
         )
     }
@@ -814,6 +820,7 @@ pub struct ProjectData {
     project_name: String,
     makefile_path: Option<String>,
     maketarget: Option<String>,
+    lib_path: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -918,16 +925,6 @@ fn get_distance<T: AsRef<str>>(s1: T, s2: T) -> i32 {
     diff
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct Tags {
-    fname: String,
-    result: String,
-    fargs: Option<String>,
-    //TODO optional vector from tuple of testset!! -> Box
-    setup_code: Option<String>,
-    teardown_code: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 struct SavedTestcase {
     name: String,
@@ -936,7 +933,7 @@ struct SavedTestcase {
     description: Option<String>,
     args: Option<String>,
     cflags: Option<String>,
-    tags: Option<Tags>,
+    fname: Option<String>,
     // note: if type is mandatory for unit test
     in_file: Option<String>,
     exp_file: Option<String>,
