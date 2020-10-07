@@ -617,12 +617,12 @@ impl Test for IoTest {
                     .as_ref()
                     .unwrap_or(&String::from("./")),
             )
-            .args(&[
+            .args([
                 "--leak-check=full",
                 format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number).as_ref(),
                 &format!("./{}", &self.meta.projdata.project_name),
                 &self.argv,
-            ])
+            ].iter().filter(|s| !s.is_empty()))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
