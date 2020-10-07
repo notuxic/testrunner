@@ -711,8 +711,8 @@ impl Test for IoTest {
             kind: self.meta.kind,
             distance_percentage: Some(percentage_from_levenstein(
                 distance,
-                &stdinstring,
                 &stdoutstring,
+                &given_output.0,
             )),
         })
     }
