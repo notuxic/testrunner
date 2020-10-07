@@ -675,7 +675,7 @@ impl Test for IoTest {
         let mut passed: bool = true; //TODO check if there are not diffs
 
         if self.exp_retvar.is_some() {
-            if status.unwrap() != self.exp_retvar.unwrap() {
+            if status.unwrap() != self.exp_retvar.unwrap() || distance != 0 {
                 passed = false;
             }
         }
