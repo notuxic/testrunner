@@ -506,8 +506,6 @@ pub enum ExecuteError {
 fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ExecuteError> {
     let mut cmd = cmd;
 
-    //let t = timeout as u64;
-
     let mut output = String::new();
 
     match cmd.wait_timeout(Duration::from_secs(timeout as u64) ).unwrap() {
