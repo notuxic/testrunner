@@ -16,6 +16,7 @@ extern crate clap;
 use clap::{App, Arg};
 use colored::*;
 use serde::export::Formatter;
+use wait_timeout::ChildExt;
 
 mod unit_test;
 
@@ -505,40 +506,32 @@ pub enum ExecuteError {
 fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ExecuteError> {
     let mut cmd = cmd;
 
+    //let t = timeout as u64;
+
     let mut output = String::new();
-    for _ in 0..timeout {
-        match cmd.try_wait() {
-            Ok(Some(expr)) => {
-                let mut tmp = String::new();
-                cmd.stdout
-                    .as_mut()
-                    .unwrap()
-                    .read_to_string(&mut tmp)
-                    .expect("could not read stdout");
-                output = format!("{}{}", output, tmp);
-                let retvar = expr.code().unwrap_or(-1);
-                return Ok((output, retvar));
-            }
-            Ok(None) => {
-                // need to read from stdout (bug in rust command stdlib)
-                let mut tmp = String::new();
-                cmd.stdout
-                    .as_mut()
-                    .unwrap()
-                    .read_to_string(&mut tmp)
-                    .expect("could not read stdout");
-                output = format!("{}{}", output, tmp);
-                sleep(Duration::from_secs(1));
-            }
-            Err(err) => {
-                println!("{:?}", err);
-            }
+
+    match cmd.wait_timeout(Duration::from_secs(timeout as u64) ).unwrap() {
+        Some(expr) =>
+        {
+            let mut tmp = String::new();
+            cmd.stdout
+                .as_mut()
+                .unwrap()
+                .read_to_string(&mut tmp)
+                .expect("could not read stdout");
+            //println!("debug1");
+            output = format!("{}{}", output, tmp);
+            let retvar = expr.code().unwrap_or(-1);
+            return Ok((output, retvar));            
+        }
+        None => {
+            //cmd.kill().unwrap();
+            println!("killing {} beacause of timeout", number);
+            cmd.kill().expect("Upps, can't kill this one");
+            return Err(ExecuteError::Timeout);
         }
     }
 
-    println!("killing {} beacause of timeout", number);
-    cmd.kill().expect("Upps, can't kill this one");
-    return Err(ExecuteError::Timeout);
 }
 
 impl Test for IoTest {
