@@ -16,10 +16,14 @@ use clap::{App, Arg};
 use colored::*;
 use serde::export::Formatter;
 use wait_timeout::ChildExt;
-// use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use difference::{Changeset, Difference};
 
 mod unit_test;
+
+static mut COMPARE_MODE :  [&'static str; 1] = ["\n"];
+static mut VERBOSE : bool = false;
+static NEWLINE : &str = "\n";
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum TestCaseKind {
@@ -91,7 +95,7 @@ impl TestResult {
             "compile_warnings": self.compile_warnings.clone().unwrap_or(String::from("")),
         }))
     }
-    pub fn get_html_long(&self) -> Result<String, GenerationError> {
+    pub fn get_html_long(&self, compare_mode : &str) -> Result<String, GenerationError> {
         let retvar = box_html! {
             div(id="long_report"){
                 div(id = "title"){
@@ -148,12 +152,11 @@ impl TestResult {
                     }
 
                     @ if self.diff.is_some(){
-                        |templ|{
+                        |templ|
+                        {
 
-                            //&mut *templ << Raw(  changeset_to_html(  &self.diff2.as_ref().unwrap()  ).unwrap()       );
-                            &mut *templ << Raw (  changeset_to_html(  &self.diff.as_ref().unwrap()  ).unwrap_or(String::from(r"<div>Error cannot get changelist</div>"))      );
+                            &mut *templ << Raw (  changeset_to_html(  &self.diff.as_ref().unwrap(), compare_mode  ).unwrap_or(String::from(r"<div>Error cannot get changelist</div>"))      );
 
-                                //mystring );//.unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
                         }
                     }
 
@@ -280,7 +283,7 @@ impl TestCaseGenerator {
 
         return Ok(());
     }
-    pub fn make_html_report(&self) -> Result<String, GenerationError> {
+    pub fn make_html_report(&self, compare_mode : &str) -> Result<String, GenerationError> {
         if !self.binary.info.compiled {
             return Ok(String::from("did not compile.."));
         }
@@ -362,7 +365,7 @@ impl TestCaseGenerator {
                         |templ| {
                             for tc in self.test_results.iter()
                             {
-                               &mut *templ << Raw(tc.get_html_long().unwrap_or(String::from("<div>Error</div>")));
+                               &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
                             }
                         }
 
@@ -383,7 +386,14 @@ impl TestCaseGenerator {
     }
 }
 
-pub fn changeset_to_html(changes: &Changeset) -> Result<String, HTMLError> {
+pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<String, HTMLError> 
+{
+    let mut line_end = "";
+    if compare_mode.eq(NEWLINE)
+    {
+        line_end = "\n";
+    }
+
     let retvar = format!(
         "{}",
         box_html! {
@@ -400,26 +410,27 @@ pub fn changeset_to_html(changes: &Changeset) -> Result<String, HTMLError> {
                                 {
                                     Difference::Same(ref z)=> 
                                     {
-                                        diffright.push_str(&format!("{}", z.replace(" ", "&nbsp")));
-                                        diffleft.push_str(&format!("{}", z.replace(" ", "&nbsp")));
+                                        diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp"), line_end));//
+                                        diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp"), line_end));//
                                     }
                                     Difference::Rem(ref z) =>
                                     {
-                                            diffleft.push_str(&format!("<span id =\"wrong\">{}</span>", 
-                                                                z.replace(" ", "&nbsp").replace("\n", "\\n<br>")));
+                                            diffleft.push_str(&format!("<span id =\"wrong\">{}{}</span>", 
+                                                                z.replace(" ", "&nbsp"), line_end));//z.replace(" ", "&nbsp").replace("\n", "\\n&nbsp<br>"), line_end));
                                     }
 
                                     Difference::Add(ref z) =>
                                     {
-                                        diffright.push_str(&format!("<span id =\"missing\">{}</span>", 
-                                                                    z.replace(" ", "&nbsp").replace("\n", "\\n<br>")));
+                                        diffright.push_str(&format!("<span id =\"missing\">{}{}</span>", 
+                                                                    z.replace(" ", "&nbsp"), line_end));//
                                     }
 
                                 }
                             }
 
                             &mut *templ << Raw(format!("<tr><th>desired output</th><th>your output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
-                                                        diffleft.replace('\n', "<br>"), diffright.replace('\n', "<br>")));
+                                                        diffleft.replace("\n", "&nbsp<br>"), 
+                                                        diffright.replace("\n", "&nbsp<br>") ));
 
                     }
                 }
@@ -667,9 +678,10 @@ impl Test for IoTest {
         // make changeset
 
         let now = Instant::now();
+        let compare_mode = unsafe { COMPARE_MODE[0] };
 
 
-        let changeset = Changeset::new(&stdoutstring, &given_output.0, "");
+        let changeset = Changeset::new(&stdoutstring, &given_output.0, compare_mode );
 
         let new_now = Instant::now();
         println!("diff took {:?}", new_now.duration_since(now));
@@ -696,45 +708,42 @@ impl Test for IoTest {
                 .unwrap_or(String::from(".")),
             self.meta.number
         );
+
+
         // prints diff with colors to terminal
         // green = ok
         // blue = reference (our solution)
-        // red = wrong (students solution)
-        // if changeset.distance > 0
-        // {
-        //     let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
-        //     println!("diff distance {}", changeset.distance);
-        //     for c in &changeset.diffs
-        //     {
-        //         match *c 
-        //         {
-        //             Difference::Same(ref z)=> 
-        //             {
-        //                 colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-        //                 println!("correct output");
-        //                 writeln!(&mut colored_stdout, "{}", String::from(z.replace('\n', "\\n\n")) ).unwrap();
+        // red = wrong (students solution) / too much
+        let verbose = unsafe { VERBOSE };
+        if changeset.distance > 0 &&  verbose
+        {
+            let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
 
-        //             }
-        //             Difference::Rem(ref z) =>
-        //             {
+            for c in &changeset.diffs
+            {
+                match *c 
+                {
+                    Difference::Same(ref z)=> 
+                    {
+                        colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+                        writeln!(&mut colored_stdout, "{}", String::from(z) ).unwrap();
+                    }
+                    Difference::Rem(ref z) =>
+                    {
+                        colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
+                        writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                    }
 
-        //                 colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-        //                 println!("desired output");
-        //                 writeln!(&mut colored_stdout, "{}", String::from(z.replace('\n', "\\n\n"))  ).unwrap();
+                    Difference::Add(ref z) =>
+                    {
+                        colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+                        writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                    }
 
-        //             }
-
-        //             Difference::Add(ref z) =>
-        //             {
-        //                 colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-        //                 println!("too much output");
-        //                 writeln!(&mut colored_stdout, "{}", String::from(z.replace('\n', "\\n\n"))  ).unwrap();
-        //             }
-
-        //         }
-        //     }
-        //     colored_stdout.reset().unwrap();
-        // }
+                }
+            }
+            colored_stdout.reset().unwrap();
+        }
             
         let valgrind = parse_vg_log(&String::from(vg_filepath)).unwrap_or((-1, -1));
         println!("{:?}", valgrind);
@@ -1016,12 +1025,67 @@ fn main() {
                 .requires("html")
                 .help("opens the html file with xdg-open"),
         )
-        // .arg(
-        //     Arg::with_name("verbose")
-        //         .short("v")
-        //         .default_value("false")
-        // )
+        .arg(
+            Arg::with_name("compare_mode")
+                .short("m")
+                .long("mode")
+                .help("L, l : Compare outputs line by line\nW, w : compare outputs word by word\n C,c : compare outputs char by char")
+                .takes_value(true)
+                //.default_value("L")
+        )
+        .arg(
+            Arg::with_name("verbosity_level")
+                .short("v")
+                .long("verbose")
+                .takes_value(false)
+                //.default_value("false")
+                .help("print diff to terminal 0 = off, 1 = on")
+        )
         .get_matches();
+
+        match cli_args.is_present("compare_mode")
+        {  true =>
+            {
+                let compare_mode = cli_args.value_of("compare_mode").unwrap().to_uppercase();
+                unsafe 
+                {
+                    if compare_mode.contains("W")
+                    {
+                        COMPARE_MODE = [ " "   ];
+                    }
+                    else if compare_mode.contains("C")
+                    {
+                        COMPARE_MODE = [ "" ];
+                    }
+                    else
+                    {
+                        COMPARE_MODE = [ "\n"   ];
+                    }
+                }
+            }
+            false =>
+            {
+                unsafe { COMPARE_MODE = [ "\n" ]; }
+            }
+        }
+        //let mut compare_mode = "";
+        let compare_mode = unsafe{ COMPARE_MODE[0] };
+
+        //let verbose = false;
+        match cli_args.is_present("verbosity_level")
+        {
+            true =>
+            {
+                unsafe{ VERBOSE = true};
+            }
+            false =>
+            {
+                unsafe {VERBOSE = false};
+            }
+        }
+
+        
+
     let config: String = match cli_args.is_present("TESTINPUT") {
         true => {
             println!("{}", "using testconfig...".blue());
@@ -1080,7 +1144,7 @@ fn main() {
 
     if let Some(html_out) = cli_args.value_of("html") {
         let output = generator
-            .make_html_report()
+            .make_html_report(compare_mode)
             .expect("could not make html report");
         write(html_out, output).expect("cannot write html file");
 
