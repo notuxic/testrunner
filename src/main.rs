@@ -9,7 +9,6 @@ use std::fmt;
 use std::fs::{create_dir_all, read_to_string, write};
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::thread::sleep;
 use std::time::{Duration, Instant};
 use std::vec;
 extern crate clap;
@@ -17,6 +16,8 @@ use clap::{App, Arg};
 use colored::*;
 use serde::export::Formatter;
 use wait_timeout::ChildExt;
+// use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use difference::{Changeset, Difference};
 
 mod unit_test;
 
@@ -50,12 +51,16 @@ pub struct UnitTest {
     fname: String,
     argv: String,
 }
+
 #[allow(dead_code)]
 #[derive(Serialize)]
 pub struct TestResult {
+
     kind: TestCaseKind,
     #[serde(skip)]
-    diff: Option<Vec<diff::Result<String>>>,
+    diff: Option<Changeset>,
+    //#[serde(skip)]
+    //diff: Option<Vec<diff::Result<String>>>,
     distance_percentage: Option<f32>,
     vg_warnings: i32,
     vg_errors: i32,
@@ -144,7 +149,11 @@ impl TestResult {
 
                     @ if self.diff.is_some(){
                         |templ|{
-                            &mut *templ << Raw(changeset_to_html(&self.diff.as_ref().unwrap()).unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
+
+                            //&mut *templ << Raw(  changeset_to_html(  &self.diff2.as_ref().unwrap()  ).unwrap()       );
+                            &mut *templ << Raw (  changeset_to_html(  &self.diff.as_ref().unwrap()  ).unwrap_or(String::from(r"<div>Error cannot get changelist</div>"))      );
+
+                                //mystring );//.unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
                         }
                     }
 
@@ -374,7 +383,7 @@ impl TestCaseGenerator {
     }
 }
 
-pub fn changeset_to_html(changes: &Vec<diff::Result<String>>) -> Result<String, HTMLError> {
+pub fn changeset_to_html(changes: &Changeset) -> Result<String, HTMLError> {
     let retvar = format!(
         "{}",
         box_html! {
@@ -383,25 +392,34 @@ pub fn changeset_to_html(changes: &Vec<diff::Result<String>>) -> Result<String, 
                     |templ|{
                             let mut diffright = String::new();
                             let mut diffleft = String::new();
-                            for w in changes.iter(){
-                                match w{
-                                    diff::Result::Both(x, y) => {
-                                        // TODO refactor to avoid Raw!
-                                        //diffleft+=&format!("<span id =\"correct\">{}</span>",content.clone());
-                                        //diffright+=&format!("<span id =\"correct\">{}</span>",content.clone());
-                                        diffleft.push_str(&format!("{}<br>",x.replace(" ", "&nbsp")));
-                                        diffright.push_str(&format!("{}<br>",y.replace(" ", "&nbsp")));
-                                    },
-                                    diff::Result::Right(x) =>{
-                                        diffright.push_str(&format!("<span id =\"missing\">{}</span><br>", x.replace(" ", "&nbsp")));
-                                    },
-                                    diff::Result::Left(x) =>{
-                                        diffleft.push_str(&format!("<span id =\"wrong\">{}</span><br>", x.replace(" ", "&nbsp")));
-                                    },
+
+
+                            for c in &changes.diffs
+                            {
+                                match *c 
+                                {
+                                    Difference::Same(ref z)=> 
+                                    {
+                                        diffright.push_str(&format!("{}", z.replace(" ", "&nbsp")));
+                                        diffleft.push_str(&format!("{}", z.replace(" ", "&nbsp")));
+                                    }
+                                    Difference::Rem(ref z) =>
+                                    {
+                                            diffleft.push_str(&format!("<span id =\"wrong\">{}</span>", 
+                                                                z.replace(" ", "&nbsp").replace("\n", "\\n<br>")));
+                                    }
+
+                                    Difference::Add(ref z) =>
+                                    {
+                                        diffright.push_str(&format!("<span id =\"missing\">{}</span>", 
+                                                                    z.replace(" ", "&nbsp").replace("\n", "\\n<br>")));
+                                    }
+
                                 }
                             }
-                            // embedd into list item and add it to the template
-                            &mut *templ << Raw(format!("<tr><th>desired output</th><th>your output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",diffleft,diffright));
+
+                            &mut *templ << Raw(format!("<tr><th>desired output</th><th>your output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
+                                                        diffleft.replace('\n', "<br>"), diffright.replace('\n', "<br>")));
 
                     }
                 }
@@ -441,6 +459,7 @@ impl Test for UnitTest {
         }
 
         Ok(TestResult {
+            //diff2 : None,
             distance_percentage: None,
             compile_warnings: None,
             kind: TestCaseKind::UnitTest,
@@ -648,20 +667,15 @@ impl Test for IoTest {
         // make changeset
 
         let now = Instant::now();
-        let diff = diff::lines(&stdoutstring, &given_output.0);
-        let diff: Vec<diff::Result<String>> = diff
-            .iter()
-            .map(|d| match d {
-                diff::Result::Left(x) => diff::Result::Left(x.to_string()),
-                diff::Result::Both(x, y) => diff::Result::Both(x.to_string(), y.to_string()),
-                diff::Result::Right(x) => diff::Result::Right(x.to_string()),
-            })
-            .collect();
+
+
+        let changeset = Changeset::new(&stdoutstring, &given_output.0, "");
 
         let new_now = Instant::now();
         println!("diff took {:?}", new_now.duration_since(now));
 
-        let distance = get_distance(&stdoutstring, &given_output.0);
+
+        let distance = changeset.distance;//get_distance(&stdoutstring, &given_output.0);
         let status = Some((given_output.1 as i8) as i32); // TODO refactor
         let mut passed: bool = true; //TODO check if there are not diffs
 
@@ -682,12 +696,52 @@ impl Test for IoTest {
                 .unwrap_or(String::from(".")),
             self.meta.number
         );
+        // prints diff with colors to terminal
+        // green = ok
+        // blue = reference (our solution)
+        // red = wrong (students solution)
+        // if changeset.distance > 0
+        // {
+        //     let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
+        //     println!("diff distance {}", changeset.distance);
+        //     for c in &changeset.diffs
+        //     {
+        //         match *c 
+        //         {
+        //             Difference::Same(ref z)=> 
+        //             {
+        //                 colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+        //                 println!("correct output");
+        //                 writeln!(&mut colored_stdout, "{}", String::from(z.replace('\n', "\\n\n")) ).unwrap();
 
+        //             }
+        //             Difference::Rem(ref z) =>
+        //             {
+
+        //                 colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
+        //                 println!("desired output");
+        //                 writeln!(&mut colored_stdout, "{}", String::from(z.replace('\n', "\\n\n"))  ).unwrap();
+
+        //             }
+
+        //             Difference::Add(ref z) =>
+        //             {
+        //                 colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+        //                 println!("too much output");
+        //                 writeln!(&mut colored_stdout, "{}", String::from(z.replace('\n', "\\n\n"))  ).unwrap();
+        //             }
+
+        //         }
+        //     }
+        //     colored_stdout.reset().unwrap();
+        // }
+            
         let valgrind = parse_vg_log(&String::from(vg_filepath)).unwrap_or((-1, -1));
         println!("{:?}", valgrind);
         println!("done with {}", self.meta.number);
         Ok(TestResult {
-            diff: Some(diff),
+            diff : Some(changeset),
+            //diff: Some(diff),
             compile_warnings: None,
             implemented: None,
             passed,
@@ -900,21 +954,6 @@ impl Binary {
     }
 }
 
-fn get_distance<T: AsRef<str>>(s1: T, s2: T) -> i32 {
-    let mut diff = 0;
-    let s1_lines = s1.as_ref().split('\n');
-    let s2_lines = s2.as_ref().split('\n');
-
-    for (s1_l, s2_l) in s1_lines.zip(s2_lines) {
-        for (s1_c, s2_c) in s1_l.chars().zip(s2_l.chars()) {
-            if s1_c != s2_c {
-                diff += 1
-            }
-        }
-    }
-
-    diff
-}
 
 #[derive(Debug, Deserialize)]
 struct SavedTestcase {
@@ -977,6 +1016,11 @@ fn main() {
                 .requires("html")
                 .help("opens the html file with xdg-open"),
         )
+        // .arg(
+        //     Arg::with_name("verbose")
+        //         .short("v")
+        //         .default_value("false")
+        // )
         .get_matches();
     let config: String = match cli_args.is_present("TESTINPUT") {
         true => {
