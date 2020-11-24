@@ -533,7 +533,7 @@ pub enum ExecuteError {
     None,
 }
 
-fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ExecuteError> {
+fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ( ExecuteError)> {
     let mut cmd = cmd;
 
     let mut output = String::new();
@@ -554,9 +554,24 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32
         }
         None => {
             //cmd.kill().unwrap();
+            //let mut tmp = String::new();
             println!("killing {} beacause of timeout", number);
+            // cmd.stdout
+            //     .as_mut()
+            //     .unwrap()
+            //     .read_to_string(&mut tmp)
+            //     .expect("timeout");
+            // println!("timed out, output: {:?}", tmp  );
+            //cmd.
             cmd.kill().expect("Upps, can't kill this one");
+            //println!("{:?}", cmd.kill().unwrap()) ;
+            //println!("{:?}",cmd.wait().unwrap().code());
+            //cmd.stdout.unwrap().read_to_string(&mut tmp).unwrap();
+        
+            //println!("timeout, output: \n {:?}", tmp);
+
             return Err(ExecuteError::Timeout);
+
         }
     }
 
@@ -629,6 +644,7 @@ impl Test for IoTest {
 
         //run valgrind with the given program name
         let mut run_cmd = Command::new("valgrind")
+
             //assuming makefile_path = project path
             .current_dir(
                 &self
@@ -637,6 +653,7 @@ impl Test for IoTest {
                     .makefile_path
                     .as_ref()
                     .unwrap_or(&String::from("./")),
+                    
             )
             .args([
                 "--leak-check=full",
@@ -661,7 +678,7 @@ impl Test for IoTest {
         //get output
         let timeout = match self.meta.timeout {
             Some(to) => to,
-            None => 5, // default is 15 sec
+            None => 5, // default is 5 sec
         };
 
         let proc_response = command_timeout(run_cmd, timeout, self.meta.number);
@@ -709,12 +726,22 @@ impl Test for IoTest {
             self.meta.number
         );
 
+        let verbose = unsafe { VERBOSE };
 
+        if verbose && distance != 0
+        {   
+            println!("--------------------------------");
+            println!("Distance: {:?}", distance);
+            println!("Wanted Output:\n{:?}", stdoutstring);//.replace("\t", "→").replace("\n", "↵\n" ).replace(" ", "‧")  );
+            println!("--------------------------------");
+            println!("Your Output:\n{:?}", given_output.0);//.replace("\t", "→").replace("\n", "↵\n" ).replace(" ", "‧") );
+        }
+        
         // prints diff with colors to terminal
         // green = ok
         // blue = reference (our solution)
         // red = wrong (students solution) / too much
-        let verbose = unsafe { VERBOSE };
+        l
         if changeset.distance > 0 &&  verbose
         {
             let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
