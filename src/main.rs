@@ -309,11 +309,13 @@ impl TestCaseGenerator {
                             margin-left:5em;margin-right:5em}#long_report > div#description{margin-left:10em;margin-right:10em}#long_report
                             > div#shortinfo table{margin-left:auto;margin-right:auto}#title > h2{border-bottom:0.1em dashed #444}#shortinfo
                             {margin-top:2em}#shortinfo > table tr th:first-child{text-transform:capitalize}#shortinfo > table 
-                            th:first-of-type{border-right:0.1em solid #222}#differences{background:#eee;margin-top:3em;padding-left:3em;
+                            th:first-of-type{border-right:0.1em solid #222}table td, table td * {vertical-align: top;horizontal-align: top}
+                            #differences{background:#eee;margin-top:3em;padding-left:3em;
                             width:initial}#differences tr:first-of-type{border-bottom:0.1em solid #222;text-transform:capitalize}#differences
                             th{padding:0.5em}#differences td{font-family:'Hack', monospace;font-size:0.8em;padding:0.5em;min-width:82ch;max-width:
                             82ch;word-wrap:anywhere}#differences td:first-child,#differences th:first-child{border-right:0.1em dashed #222}
                             #missing{background-color:yellowgreen}#wrong{background-color:IndianRed}
+                            
                         ")
                 }
                 body{
@@ -533,7 +535,7 @@ pub enum ExecuteError {
     None,
 }
 
-fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ( ExecuteError)> {
+fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ExecuteError> {
     let mut cmd = cmd;
 
     let mut output = String::new();
@@ -541,34 +543,22 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32
     match cmd.wait_timeout(Duration::from_secs(timeout as u64) ).unwrap() {
         Some(expr) =>
         {
-            let mut tmp = String::new();
+            let mut tmp : Vec<u8> =  Vec::new(); 
+
             cmd.stdout
                 .as_mut()
                 .unwrap()
-                .read_to_string(&mut tmp)
+                .read_to_end(&mut tmp)
                 .expect("could not read stdout");
-            //println!("debug1");
-            output = format!("{}{}", output, tmp);
+
+            output = format!("{}{}", output, String::from_utf8_lossy(&tmp) );
             let retvar = expr.code().unwrap_or(-1);
             return Ok((output, retvar));            
         }
         None => {
-            //cmd.kill().unwrap();
-            //let mut tmp = String::new();
+
             println!("killing {} beacause of timeout", number);
-            // cmd.stdout
-            //     .as_mut()
-            //     .unwrap()
-            //     .read_to_string(&mut tmp)
-            //     .expect("timeout");
-            // println!("timed out, output: {:?}", tmp  );
-            //cmd.
             cmd.kill().expect("Upps, can't kill this one");
-            //println!("{:?}", cmd.kill().unwrap()) ;
-            //println!("{:?}",cmd.wait().unwrap().code());
-            //cmd.stdout.unwrap().read_to_string(&mut tmp).unwrap();
-        
-            //println!("timeout, output: \n {:?}", tmp);
 
             return Err(ExecuteError::Timeout);
 
@@ -642,9 +632,30 @@ impl Test for IoTest {
         );
         create_dir_all(tmpfolder).expect("could not create tmp folder");
 
-        //run valgrind with the given program name
-        let mut run_cmd = Command::new("valgrind")
+        // // run assignment file compiled with fsanitize
+        // let mut run_cmd = Command::new(format!("./{}", &self.meta.projdata.project_name))
+        //     //assuming makefile_path = project path
+        //     .current_dir(
+        //         &self
+        //             .meta
+        //             .projdata
+        //             .makefile_path
+        //             .as_ref()
+        //             .unwrap_or(&String::from("./")),
+        //     )
+        //     .args([
+        //         &self.argv,
+        //     ].iter().filter(|s| !s.is_empty()))
+        //     .stdin(Stdio::piped())
+        //     .stdout(Stdio::piped())
+        //     .stderr(Stdio::piped())
+        //     .envs(envs)
+        //     .spawn()
+        //     .expect("could not spawn process");
 
+
+        let mut run_cmd = Command::new("valgrind")
+            // run valgrind with the given program name
             //assuming makefile_path = project path
             .current_dir(
                 &self
@@ -666,7 +677,7 @@ impl Test for IoTest {
             .stderr(Stdio::piped())
             .envs(envs)
             .spawn()
-            .expect("could not spawn process");
+             .expect("could not spawn process");
 
         if !stdinstring.is_empty() {
             let stdin = run_cmd.stdin.as_mut().expect("failed to get stdin");
@@ -675,10 +686,17 @@ impl Test for IoTest {
                 .expect("could not send input");
         }
 
+        let global_timeout = match self.meta.projdata.global_timeout
+        {
+            Some(to) => to,
+            None => 10, // default is 10 sec
+        };
+        //println!("global timeout: {:?}", global_timeout);
         //get output
         let timeout = match self.meta.timeout {
             Some(to) => to,
-            None => 5, // default is 5 sec
+            None => global_timeout,
+        
         };
 
         let proc_response = command_timeout(run_cmd, timeout, self.meta.number);
@@ -732,16 +750,16 @@ impl Test for IoTest {
         {   
             println!("--------------------------------");
             println!("Distance: {:?}", distance);
-            println!("Wanted Output:\n{:?}", stdoutstring);//.replace("\t", "→").replace("\n", "↵\n" ).replace(" ", "‧")  );
+            println!("Wanted Output:\n{:?}", stdoutstring);
             println!("--------------------------------");
-            println!("Your Output:\n{:?}", given_output.0);//.replace("\t", "→").replace("\n", "↵\n" ).replace(" ", "‧") );
+            println!("Your Output:\n{:?}", given_output.0);
         }
         
         // prints diff with colors to terminal
         // green = ok
         // blue = reference (our solution)
         // red = wrong (students solution) / too much
-        l
+        
         if changeset.distance > 0 &&  verbose
         {
             let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
@@ -902,6 +920,7 @@ pub struct ProjectData {
     makefile_path: Option<String>,
     maketarget: Option<String>,
     lib_path: Option<String>,
+    global_timeout : Option<i32>,
 }
 
 #[derive(Clone, Debug)]
