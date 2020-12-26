@@ -46,6 +46,7 @@ pub struct TestMeta {
     timeout: Option<i32>,
     projdata: ProjectData, // use lifetime ref?
     kind: TestCaseKind,
+    protected: bool,
 }
 
 #[allow(dead_code)]
@@ -77,6 +78,7 @@ pub struct TestResult {
     name: String,
     description: String,
     number: i32,
+    protected: bool,
 }
 
 impl TestResult {
@@ -93,6 +95,7 @@ impl TestResult {
             "vg_errors": self.vg_errors,
             "result": self.result.clone(),
             "compile_warnings": self.compile_warnings.clone().unwrap_or(String::from("")),
+            "protected" : self.protected,
         }))
     }
     pub fn get_html_long(&self, compare_mode : &str) -> Result<String, GenerationError> {
@@ -166,10 +169,10 @@ impl TestResult {
         };
         Ok(String::from(format!("{}", retvar)))
     }
-    pub fn get_html_short(&self) -> Result<String, GenerationError> {
+    pub fn get_html_short(&self, protected_mode : bool) -> Result<String, GenerationError> {
         let retvar = box_html! {
             tr{
-                th{:&self.name}
+                th{@ if protected_mode && self.protected { i{:"redacted"} } else { :&self.name }}
                 th{:format!("{}",self.kind)}
                 th{:format!("{}",self.passed)}
                 th{:format!("{}",self.distance_percentage.unwrap_or(0.0))}
@@ -283,7 +286,7 @@ impl TestCaseGenerator {
 
         return Ok(());
     }
-    pub fn make_html_report(&self, compare_mode : &str) -> Result<String, GenerationError> {
+    pub fn make_html_report(&self, compare_mode : &str, protected_mode : bool) -> Result<String, GenerationError> {
         if !self.binary.info.compiled {
             return Ok(String::from("did not compile.."));
         }
@@ -350,7 +353,7 @@ impl TestCaseGenerator {
                             |templ|{
                                 for tc in self.test_results.iter()
                                 {
-                                    match tc.get_html_short(){
+                                    match tc.get_html_short(protected_mode){
                                         Ok(res)=>{
                                             &mut *templ << Raw(res);
                                         }
@@ -367,7 +370,9 @@ impl TestCaseGenerator {
                         |templ| {
                             for tc in self.test_results.iter()
                             {
-                               &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
+                                if !(protected_mode && tc.protected) {  
+                                    &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
+                                }
                             }
                         }
 
@@ -487,6 +492,7 @@ impl Test for UnitTest {
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
             number: self.meta.number,
+            protected: self.meta.protected,
         })
     }
     fn from_saved_tc(
@@ -503,6 +509,7 @@ impl Test for UnitTest {
                 timeout: testcase.timeout,
                 projdata: projdata.clone(),
                 kind: TestCaseKind::UnitTest,
+                protected: testcase.protected.unwrap_or(false),
             },
             fname: testcase.fname.as_ref().unwrap_or(&String::new()).clone(),
             argv: testcase.args.as_ref().unwrap_or(&String::new()).clone(),
@@ -813,6 +820,7 @@ impl Test for IoTest {
                 &stdoutstring,
                 &given_output.0,
             )),
+            protected: self.meta.protected,
         })
     }
 
@@ -836,6 +844,7 @@ impl Test for IoTest {
             desc: testcase.description.clone(),
             projdata: projdata.clone(),
             timeout: testcase.timeout,
+            protected: testcase.protected.unwrap_or(false),
         };
 
         let retvar = IoTest {
@@ -1027,6 +1036,7 @@ struct SavedTestcase {
     exp_retvar: Option<i32>,
     timeout: Option<i32>,
     env_vars: Option<String>,
+    protected: Option<bool>,
 }
 
 fn main() {
@@ -1052,6 +1062,7 @@ fn main() {
         .arg(
             Arg::with_name("json")
                 .short("j")
+                .long("json-output")
                 .takes_value(true)
                 .value_name("JSON_OUT")
                 .default_value("result.json")
@@ -1060,11 +1071,21 @@ fn main() {
         .arg(
             Arg::with_name("html")
                 .short("o")
+                .long("html-output")
                 .takes_value(true)
                 .value_name("HTML_OUTPUT")
                 .default_value("result.html")
                 .help("writes testresult in pretty html format"),
         )
+        .arg(
+            Arg::with_name("prot-html")
+                .short("p")
+                .long("prot-html")
+                .takes_value(true)
+                .value_name("PROT_HTML_OUTPUT")
+                .default_value("prot-result.html")
+                .help("writes testresult in pretty html format, with details of protected testcases redacted")
+            )
         .arg(
             Arg::with_name("browser")
                 .short("b")
@@ -1155,6 +1176,7 @@ fn main() {
             description = "wubwub"
             exp_string = "oi\nhelloyolo"
             in_string = "tom\n1\n"
+            protected = true
 
             [[testcases]]
             name = "timeout"
@@ -1190,7 +1212,7 @@ fn main() {
 
     if let Some(html_out) = cli_args.value_of("html") {
         let output = generator
-            .make_html_report(compare_mode)
+            .make_html_report(compare_mode, false)
             .expect("could not make html report");
         write(html_out, output).expect("cannot write html file");
 
@@ -1198,6 +1220,22 @@ fn main() {
             println!("open browser");
             Command::new("xdg-open")
                 .arg(html_out)
+                .spawn()
+                .expect("cannot start xdg-open");
+        }
+    }
+
+    if cli_args.occurrences_of("prot-html") > 0 {
+        let prot_html_out = cli_args.value_of("prot-html").unwrap();
+        let output = generator
+            .make_html_report(compare_mode, true)
+            .expect("could not make html report");
+        write(prot_html_out, output).expect("cannot write html file");
+
+        if cli_args.is_present("browser") {
+            println!("open browser");
+            Command::new("xdg-open")
+                .arg(prot_html_out)
                 .spawn()
                 .expect("cannot start xdg-open");
         }
