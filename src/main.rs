@@ -69,6 +69,7 @@ pub struct TestResult {
     distance_percentage: Option<f32>,
     vg_warnings: i32,
     vg_errors: i32,
+    timeout: bool,
     compile_warnings: Option<String>,
     ret: Option<i32>,
     exp_ret: Option<i32>,
@@ -93,6 +94,7 @@ impl TestResult {
             //"diff": format!("{}",self.diff.as_ref().unwrap_or(&Changeset::new("","",""))),
             "vg_warnings": self.vg_warnings,
             "vg_errors": self.vg_errors,
+            "timeout": self.timeout,
             "result": self.result.clone(),
             "compile_warnings": self.compile_warnings.clone().unwrap_or(String::from("")),
             "protected" : self.protected,
@@ -103,7 +105,7 @@ impl TestResult {
             div(id="long_report"){
                 div(id = "title"){
                     h2{
-                        : format!("#{} : {}",&self.number,&self.name)
+                        : Raw(format!("#{} : <a id={}></a>{}",&self.number,&self.name, &self.name))
                     }
                 }
                 div(id="description"){
@@ -152,14 +154,16 @@ impl TestResult {
                             th{:"valgrind warnings / errors"}
                             th{:format!("{} / {}",self.vg_warnings,self.vg_errors)}
                         }
+                        tr{
+                            th{:"timeout"}
+                            th{:format!("{}",self.timeout)}
+                        }                        
                     }
 
                     @ if self.diff.is_some(){
                         |templ|
                         {
-
                             &mut *templ << Raw (  changeset_to_html(  &self.diff.as_ref().unwrap(), compare_mode  ).unwrap_or(String::from(r"<div>Error cannot get changelist</div>"))      );
-
                         }
                     }
 
@@ -170,14 +174,16 @@ impl TestResult {
         Ok(String::from(format!("{}", retvar)))
     }
     pub fn get_html_short(&self, protected_mode : bool) -> Result<String, GenerationError> {
+        let name = self.name.replace("\"", "");
         let retvar = box_html! {
-            tr{
-                th{@ if protected_mode && self.protected { i{:"redacted"} } else { :&self.name }}
+            tr{             
+                th{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=#{}>#{} {}</a>", &name, &self.number, &name)) }}
                 th{:format!("{}",self.kind)}
                 th{:format!("{}",self.passed)}
                 th{:format!("{}",self.distance_percentage.unwrap_or(0.0))}
                 th{:format!("{}",self.vg_errors)}
                 th{:format!("{}",self.vg_warnings)}
+                th{:format!("{}",self.timeout)}
             }
         };
         Ok(String::from(format!("{}", retvar)))
@@ -291,6 +297,22 @@ impl TestCaseGenerator {
             return Ok(String::from("did not compile.."));
         }
 
+        let mut passed = 0;
+        let mut failed = 0;
+        for res in self.test_results.iter()
+        {
+            if res.passed == true
+            {
+                passed += 1;
+            }
+            else
+            {
+                failed += 1;
+            }
+        }
+        let percentage_passed = (passed as f32 / self.test_results.len() as f32) * 100.0; 
+
+
         let result = html! {
             : doctype::HTML;
             html{
@@ -330,6 +352,9 @@ impl TestCaseGenerator {
                     else{
                         // create short report
                         h2: "Short Report";
+                        h3: {
+                            format!("passed {:?} / {:?} ~ {:?} %  (failed: {:?})", passed, self.test_results.len(), percentage_passed , failed)                           
+                        };
                         table(id="shortreport"){
                             th{
                                 : "name"
@@ -349,7 +374,9 @@ impl TestCaseGenerator {
                             th{
                                 :"vg_warnings"
                             }
-
+                            th{
+                                :"timeout"
+                            }
                             |templ|{
                                 for tc in self.test_results.iter()
                                 {
@@ -358,14 +385,14 @@ impl TestCaseGenerator {
                                             &mut *templ << Raw(res);
                                         }
                                         Err(_err) => {
-                                            &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th>"))
+                                            &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th><th></th>"))
                                         }
                                     }
                                 }
 
                             }
                         }
-                        h2 : "Detail Report";
+                        h2 : "Detailed Report";
 
                         |templ| {
                             for tc in self.test_results.iter()
@@ -436,8 +463,8 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<Str
                             }
 
                             &mut *templ << Raw(format!("<tr><th>desired output</th><th>your output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
-                                                        diffleft.replace("\n", "&nbsp<br>"), 
-                                                        diffright.replace("\n", "&nbsp<br>") ));
+                                                        diffleft.replace("\n", "&nbsp<br>").replace("\0", "\\0"), 
+                                                        diffright.replace("\n", "&nbsp<br>").replace("\0", "\\0") ));
 
                     }
                 }
@@ -487,8 +514,9 @@ impl Test for UnitTest {
             result: String::from("Not yet implemented"),
             ret: None,
             exp_ret: None,
-            vg_errors: -1,
-            vg_warnings: -1,
+            vg_errors: 0,
+            vg_warnings: 0,
+            timeout: false,
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
             number: self.meta.number,
@@ -660,6 +688,8 @@ impl Test for IoTest {
         //     .spawn()
         //     .expect("could not spawn process");
 
+        let starttime = Instant::now();
+
 
         let mut run_cmd = Command::new("valgrind")
             // run valgrind with the given program name
@@ -675,6 +705,7 @@ impl Test for IoTest {
             )
             .args([
                 "--leak-check=full",
+                "--track-origins=yes",
                 format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number).as_ref(),
                 &format!("./{}", &self.meta.projdata.project_name),
                 &self.argv,
@@ -684,7 +715,7 @@ impl Test for IoTest {
             .stderr(Stdio::piped())
             .envs(envs)
             .spawn()
-             .expect("could not spawn process");
+            .expect("could not spawn process");
 
         if !stdinstring.is_empty() {
             let stdin = run_cmd.stdin.as_mut().expect("failed to get stdin");
@@ -707,7 +738,7 @@ impl Test for IoTest {
         };
 
         let proc_response = command_timeout(run_cmd, timeout, self.meta.number);
-        let given_output = proc_response.unwrap_or((String::from(""), -1));
+        let given_output = proc_response.unwrap_or((String::from(""), -99));
         println!(
             "testcase gave output {} {}",
             self.meta.name, self.meta.number
@@ -719,23 +750,19 @@ impl Test for IoTest {
 
         // make changeset
 
-        let now = Instant::now();
+        //let now = Instant::now();
         let compare_mode = unsafe { COMPARE_MODE[0] };
 
 
         let changeset = Changeset::new(&stdoutstring, &given_output.0, compare_mode );
 
-        let new_now = Instant::now();
-        println!("diff took {:?}", new_now.duration_since(now));
-
-
         let distance = changeset.distance;//get_distance(&stdoutstring, &given_output.0);
         let status = Some((given_output.1 as i8) as i32); // TODO refactor
-        let mut passed: bool = true; //TODO check if there are not diffs
+        let mut passed: bool = false; //TODO check if there are not diffs
 
         if self.exp_retvar.is_some() {
-            if status.unwrap() != self.exp_retvar.unwrap() || distance != 0 {
-                passed = false;
+            if status.unwrap() == self.exp_retvar.unwrap() && distance == 0 {
+                passed = true;
             }
         }
         // get vg errors and warnings
@@ -796,10 +823,21 @@ impl Test for IoTest {
             }
             colored_stdout.reset().unwrap();
         }
+        let mut timeout = true;
+        if given_output.1 != -99
+        {
+            timeout = false;
+        }
             
         let valgrind = parse_vg_log(&String::from(vg_filepath)).unwrap_or((-1, -1));
         println!("{:?}", valgrind);
+
+        let new_now = Instant::now();
+        println!("testcase took {:?}", new_now.duration_since(starttime));
         println!("done with {}", self.meta.number);
+
+
+
         Ok(TestResult {
             diff : Some(changeset),
             //diff: Some(diff),
@@ -811,6 +849,7 @@ impl Test for IoTest {
             exp_ret: self.exp_retvar,
             vg_warnings: valgrind.0,
             vg_errors: valgrind.1,
+            timeout: timeout,
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
             number: self.meta.number,
