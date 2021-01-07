@@ -69,6 +69,9 @@ pub struct TestResult {
     distance_percentage: Option<f32>,
     vg_warnings: i32,
     vg_errors: i32,
+    vg_logfile: String,
+    command_used: String,
+    used_input: String,
     timeout: bool,
     compile_warnings: Option<String>,
     ret: Option<i32>,
@@ -105,7 +108,7 @@ impl TestResult {
             div(id="long_report"){
                 div(id = "title"){
                     h2{
-                        : Raw(format!("#{} : <a id={}></a>{}",&self.number,&self.name, &self.name))
+                        : Raw(format!("#{} : <a id={}></a>{}<a href=\"#ShortReport\"> (back to summary / short report)</a>",&self.number, &self.name, &self.name))
                     }
                 }
                 div(id="description"){
@@ -113,7 +116,8 @@ impl TestResult {
                         : self.description.clone()
                     }
                 }
-                div(id="shortinfo"){
+                div(id="shortinfo")
+                {
                     table {
                         tr{
                             th{:"kind"}
@@ -151,8 +155,8 @@ impl TestResult {
                             }
                         }
                         tr{
-                            th{:"valgrind warnings / errors"}
-                            th{:format!("{} / {}",self.vg_warnings,self.vg_errors)}
+                            th{: Raw(format!("valgrind warnings / errors  (<a href=file://{}>open vg log</a>)", self.vg_logfile)) }
+                            th{: Raw(format!("{} / {}",self.vg_warnings,self.vg_errors)) }
                         }
                         tr{
                             th{:"timeout"}
@@ -160,14 +164,57 @@ impl TestResult {
                         }                        
                     }
 
+
                     @ if self.diff.is_some(){
                         |templ|
                         {
                             &mut *templ << Raw (  changeset_to_html(  &self.diff.as_ref().unwrap(), compare_mode  ).unwrap_or(String::from(r"<div>Error cannot get changelist</div>"))      );
+
                         }
                     }
+                    |templ|{
+                    &mut *templ << Raw( format!(
+                                    "{}",
+                                    box_html! {
+                                        div(id="args"){
+                                            table(id="differences"){
+                                                |templ|
+                                                {
+                                                    &mut *templ << Raw( format!("<tr><th>command and arguments</th></tr><tr><td id=\"orig\">{}</td></tr>", self.command_used) );
+
+                                                }
+                                            }
+                                        }
+                                    }
+                    ));
+                    }
+
+                    |templ|{
+                    &mut *templ << Raw( format!(
+                                    "{}",
+                                    box_html! {
+                                        div(id="args"){
+                                            table(id="differences"){
+                                                |templ|
+                                                {
+                                                    &mut *templ << Raw( format!("<tr><th>testcase input</th></tr><tr><td id=\"orig\">{}</td></tr>", self.used_input.replace("\n", "<br>")) );
+                                                }
+                                            }
+                                        }
+                                    }
+                    ));
+                    }
+                    // table(id="args"){
+                    //     |templ|
+                    //     {
+                    //         &mut *templ << Raw( format!("<tr><th>command and arguments</th></tr><tr><td>{}</td></tr>", self.command_used) );
+                    //     }
+                    // }
+
 
                 }
+
+
 
             }
         };
@@ -184,6 +231,7 @@ impl TestResult {
                 th{:format!("{}",self.vg_errors)}
                 th{:format!("{}",self.vg_warnings)}
                 th{:format!("{}",self.timeout)}
+                th{@ if self.vg_logfile.is_empty() { : ""} else { : Raw(format!("<a href=file://{}>open vg log</a>", &self.vg_logfile ))  } }
             }
         };
         Ok(String::from(format!("{}", retvar)))
@@ -351,7 +399,7 @@ impl TestCaseGenerator {
                     }
                     else{
                         // create short report
-                        h2: "Short Report";
+                        h2: Raw("<a id=ShortReport></a>Short Report");
                         h3: {
                             format!("passed {:?} / {:?} ~ {:?} %  (failed: {:?})", passed, self.test_results.len(), percentage_passed , failed)                           
                         };
@@ -377,6 +425,9 @@ impl TestCaseGenerator {
                             th{
                                 :"timeout"
                             }
+                            th{
+                                :"valgrind log"
+                            }                            
                             |templ|{
                                 for tc in self.test_results.iter()
                                 {
@@ -385,7 +436,7 @@ impl TestCaseGenerator {
                                             &mut *templ << Raw(res);
                                         }
                                         Err(_err) => {
-                                            &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th><th></th>"))
+                                            &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th><th></th><th></th>"))
                                         }
                                     }
                                 }
@@ -516,6 +567,9 @@ impl Test for UnitTest {
             exp_ret: None,
             vg_errors: 0,
             vg_warnings: 0,
+            vg_logfile: String::from(""),
+            command_used: String::from(format!("./{} {}", &self.meta.projdata.project_name, &self.argv)),
+            used_input: String::from(""),
             timeout: false,
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
@@ -667,6 +721,14 @@ impl Test for IoTest {
         );
         create_dir_all(tmpfolder).expect("could not create tmp folder");
 
+
+
+        // let vg_flags = match self.meta.projdata.valgrind_flags
+        // {
+        //     Some(to) => to,
+        //     None => vec![String::from("--leak-check=full")], // default is 10 sec
+        // };
+
         // // run assignment file compiled with fsanitize
         // let mut run_cmd = Command::new(format!("./{}", &self.meta.projdata.project_name))
         //     //assuming makefile_path = project path
@@ -690,6 +752,12 @@ impl Test for IoTest {
 
         let starttime = Instant::now();
 
+        let mut vg_flags = self.meta.projdata.valgrind_flags.as_ref()
+                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string(), "-s".to_string()] ).clone();
+
+        vg_flags.push(format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number));
+        vg_flags.push(format!("./{}", &self.meta.projdata.project_name));
+        vg_flags.push(self.argv.clone());
 
         let mut run_cmd = Command::new("valgrind")
             // run valgrind with the given program name
@@ -703,13 +771,7 @@ impl Test for IoTest {
                     .unwrap_or(&String::from("./")),
                     
             )
-            .args([
-                "--leak-check=full",
-                "--track-origins=yes",
-                format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number).as_ref(),
-                &format!("./{}", &self.meta.projdata.project_name),
-                &self.argv,
-            ].iter().filter(|s| !s.is_empty()))
+            .args(vg_flags.iter().filter(|s| !s.is_empty()))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -767,16 +829,31 @@ impl Test for IoTest {
         }
         // get vg errors and warnings
         // make path to valgrind file
-        let vg_filepath = format!(
-            "{}/tmp/{}/vg_log.txt",
-            &self
-                .meta
-                .projdata
-                .makefile_path
-                .clone()
-                .unwrap_or(String::from(".")),
-            self.meta.number
-        );
+        //let mut exe_path  = String::from("");
+
+        let exe_path = match std::env::current_dir()
+        {
+            Ok(t) => String::from(t.into_os_string().into_string().expect("")),
+        
+            Err(_e) =>  String::from(""),
+        };
+
+
+        //todo make absolute pathfinding somehow better (abspath required for html)
+        let tmp_vg_path =  self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")).clone();
+
+        let mut vg_filepath: String = String::new();
+
+        if tmp_vg_path != "."
+        {
+            vg_filepath = format!("./tmp/{}/vg_log.txt", &self.meta.number);
+        }
+        else
+        {
+            vg_filepath = format!("{}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
+        }
+
+        let vg_filepath2 = vg_filepath.clone();
 
         let verbose = unsafe { VERBOSE };
 
@@ -836,8 +913,6 @@ impl Test for IoTest {
         println!("testcase took {:?}", new_now.duration_since(starttime));
         println!("done with {}", self.meta.number);
 
-
-
         Ok(TestResult {
             diff : Some(changeset),
             //diff: Some(diff),
@@ -849,6 +924,9 @@ impl Test for IoTest {
             exp_ret: self.exp_retvar,
             vg_warnings: valgrind.0,
             vg_errors: valgrind.1,
+            vg_logfile: vg_filepath2,
+            command_used: String::from(format!("./{} {}", &self.meta.projdata.project_name, &self.argv)),
+            used_input: stdinstring,
             timeout: timeout,
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
@@ -969,6 +1047,7 @@ pub struct ProjectData {
     maketarget: Option<String>,
     lib_path: Option<String>,
     global_timeout : Option<i32>,
+    valgrind_flags : Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
