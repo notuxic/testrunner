@@ -709,19 +709,37 @@ impl Test for IoTest {
         }
         //println!("stdoutstring = {}", stdoutstring);
         // create temp folder
-        let tmpfolder: &String = &format!(
-            "{}/tmp/{}",
-            &self
-                .meta
-                .projdata
-                .makefile_path
-                .clone()
-                .unwrap_or(String::from("/.")),
-            &self.meta.number
-        );
-        create_dir_all(tmpfolder).expect("could not create tmp folder");
+
+        let mut vg_flags = self.meta.projdata.valgrind_flags.as_ref()
+                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string() , "-s".to_string()] ).clone();
 
 
+        let exe_path = match std::env::current_dir()
+        {
+            Ok(t) => String::from(t.into_os_string().into_string().expect("")),
+        
+            Err(_e) =>  String::from(""),
+        };
+
+
+        //todo make absolute pathfinding somehow better (abspath required for html)
+        let tmp_vg_path =  self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")).clone();
+
+        let mut vg_filepath: String = String::new();
+
+        if tmp_vg_path != "."
+        {
+            create_dir_all(format!("{}/tmp/{}", &self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")) , 
+                                        &self.meta.number) ).expect("could not create tmp folder");
+            vg_filepath = format!("./tmp/{}/vg_log.txt", &self.meta.number);
+            
+        }
+        else
+        {
+            create_dir_all(format!("{}/tmp/{}", exe_path, &self.meta.number) ).expect("could not create tmp folder");
+            vg_filepath = format!("{}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
+            
+        }
 
         // let vg_flags = match self.meta.projdata.valgrind_flags
         // {
@@ -752,35 +770,11 @@ impl Test for IoTest {
 
         let starttime = Instant::now();
 
-        let mut vg_flags = self.meta.projdata.valgrind_flags.as_ref()
-                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string() , "-s".to_string()] ).clone();
 
-
-        let exe_path = match std::env::current_dir()
-        {
-            Ok(t) => String::from(t.into_os_string().into_string().expect("")),
-        
-            Err(_e) =>  String::from(""),
-        };
-
-
-        //todo make absolute pathfinding somehow better (abspath required for html)
-        let tmp_vg_path =  self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")).clone();
-
-        let mut vg_filepath: String = String::new();
-
-        if tmp_vg_path != "."
-        {
-            vg_filepath = format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number);
-        }
-        else
-        {
-            vg_filepath = format!("--log-file={}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
-        }
 
         let vg_filepath2 = vg_filepath.clone();
 
-        vg_flags.push(vg_filepath2.clone());
+        vg_flags.push(format!("--log-file={}", vg_filepath2.clone() ));
         vg_flags.push(format!("./{}", &self.meta.projdata.project_name));
         vg_flags.push(self.argv.clone());
 
