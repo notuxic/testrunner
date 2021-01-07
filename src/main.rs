@@ -147,7 +147,7 @@ impl TestResult {
                         @ if self.exp_ret.is_some(){
                             tr{
                                 th{:"return value"}
-                                th{:format!("expected : {}, got :{}",self.exp_ret.unwrap_or(-1),self.ret.unwrap_or(-1))}
+                                th{:format!("expected : {}, got :{}",self.exp_ret.unwrap_or(-1),self.ret.unwrap_or(TIMEOUT))}
                             }
                         }
                         @ if self.compile_warnings.is_some(){
@@ -626,21 +626,20 @@ pub enum ExecuteError {
     None,
 }
 
-fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32), ExecuteError> {
+fn command_timeout(cmd: Child, timeout: i32, number: i32) -> (String, Option<i32>) {
     let mut cmd = cmd;
 
     let mut output = String::new();
-    let mut _retvar = TIMEOUT;
+    let mut _retvar = Some(TIMEOUT);
     let mut tmp : Vec<u8> =  Vec::new(); 
 
     match cmd.wait_timeout(Duration::from_secs(timeout as u64) ).unwrap() {
         Some(expr) =>
         {
-            _retvar = expr.code().unwrap_or(TIMEOUT);
-
+            _retvar = Some(expr.code().unwrap_or(TIMEOUT));
         }
         None => {
-            _retvar = TIMEOUT;
+            _retvar = None;
 
             println!("killing {} beacause of timeout", number);
             cmd.kill().expect("Upps, can't kill this one");
@@ -650,7 +649,7 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32
     cmd.stdout.as_mut().unwrap().read_to_end(&mut tmp).expect("could not read stdout");
     output = format!("{}{}", output, String::from_utf8_lossy(&tmp));
 
-    return Ok((output, _retvar));
+    return (output, _retvar);
 
 }
 
@@ -723,19 +722,19 @@ impl Test for IoTest {
         //todo make absolute pathfinding somehow better (abspath required for html)
         let tmp_vg_path =  self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")).clone();
 
-        let mut vg_filepath: String = String::new();
+        let mut _vg_filepath: String = String::new();
 
         if tmp_vg_path != "."
         {
             create_dir_all(format!("{}/tmp/{}", &self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")) , 
                                         &self.meta.number) ).expect("could not create tmp folder");
-            vg_filepath = format!("./tmp/{}/vg_log.txt", &self.meta.number);
+            _vg_filepath = format!("./tmp/{}/vg_log.txt", &self.meta.number);
             
         }
         else
         {
             create_dir_all(format!("{}/tmp/{}", exe_path, &self.meta.number) ).expect("could not create tmp folder");
-            vg_filepath = format!("{}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
+            _vg_filepath = format!("{}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
             
         }
 
@@ -770,7 +769,7 @@ impl Test for IoTest {
 
 
 
-        let vg_filepath2 = vg_filepath.clone();
+        let vg_filepath2 = _vg_filepath.clone();
 
         vg_flags.push(format!("--log-file={}", vg_filepath2.clone() ));
         vg_flags.push(format!("./{}", &self.meta.projdata.project_name));
@@ -817,15 +816,14 @@ impl Test for IoTest {
         
         };
 
-        let proc_response = command_timeout(run_cmd, timeout, self.meta.number);
-        let given_output = proc_response.unwrap_or((String::from(""), TIMEOUT));
+        let given_output = command_timeout(run_cmd, timeout, self.meta.number);
         println!(
             "testcase gave output {} {}",
             self.meta.name, self.meta.number
         );
 
         let mut timeout = true;
-        if given_output.1 != TIMEOUT
+        if given_output.1.is_some()
         {
             timeout = false;
         }
@@ -843,13 +841,12 @@ impl Test for IoTest {
         let changeset = Changeset::new(&stdoutstring, &given_output.0, compare_mode );
 
         let distance = changeset.distance;//get_distance(&stdoutstring, &given_output.0);
-        let status = Some((given_output.1 as i8) as i32); // TODO refactor
+        let status = given_output.1; // TODO refactor
         let mut passed: bool = false; //TODO check if there are not diffs
 
-        if self.exp_retvar.is_some() {
-            if status.unwrap() == self.exp_retvar.unwrap() && distance == 0 && timeout == false {
-                passed = true;
-            }
+        if self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap() && distance == 0 && !timeout 
+        {
+            passed = true;            
         }
         
 
@@ -906,7 +903,7 @@ impl Test for IoTest {
         }
 
             
-        let valgrind = parse_vg_log(&String::from(vg_filepath)).unwrap_or((-1, -1));
+        let valgrind = parse_vg_log(&String::from(_vg_filepath)).unwrap_or((-1, -1));
         println!("{:?}", valgrind);
 
         let new_now = Instant::now();
