@@ -25,6 +25,8 @@ static mut COMPARE_MODE :  [&'static str; 1] = ["\n"];
 static mut VERBOSE : bool = false;
 static NEWLINE : &str = "\n";
 
+static TIMEOUT : i32 = -99;
+
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum TestCaseKind {
     UnitTest,
@@ -628,31 +630,27 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> Result<(String, i32
     let mut cmd = cmd;
 
     let mut output = String::new();
+    let mut _retvar = TIMEOUT;
+    let mut tmp : Vec<u8> =  Vec::new(); 
 
     match cmd.wait_timeout(Duration::from_secs(timeout as u64) ).unwrap() {
         Some(expr) =>
         {
-            let mut tmp : Vec<u8> =  Vec::new(); 
+            _retvar = expr.code().unwrap_or(TIMEOUT);
 
-            cmd.stdout
-                .as_mut()
-                .unwrap()
-                .read_to_end(&mut tmp)
-                .expect("could not read stdout");
-
-            output = format!("{}{}", output, String::from_utf8_lossy(&tmp) );
-            let retvar = expr.code().unwrap_or(-1);
-            return Ok((output, retvar));            
         }
         None => {
+            _retvar = TIMEOUT;
 
             println!("killing {} beacause of timeout", number);
             cmd.kill().expect("Upps, can't kill this one");
-
-            return Err(ExecuteError::Timeout);
-
         }
     }
+
+    cmd.stdout.as_mut().unwrap().read_to_end(&mut tmp).expect("could not read stdout");
+    output = format!("{}{}", output, String::from_utf8_lossy(&tmp));
+
+    return Ok((output, _retvar));
 
 }
 
@@ -820,11 +818,17 @@ impl Test for IoTest {
         };
 
         let proc_response = command_timeout(run_cmd, timeout, self.meta.number);
-        let given_output = proc_response.unwrap_or((String::from(""), -99));
+        let given_output = proc_response.unwrap_or((String::from(""), TIMEOUT));
         println!(
             "testcase gave output {} {}",
             self.meta.name, self.meta.number
         );
+
+        let mut timeout = true;
+        if given_output.1 != TIMEOUT
+        {
+            timeout = false;
+        }
         // TODO options string/array in testcase data
         // TODO ignore if no_trim?
         //let given_output_t = given_output.lines().map(str::trim).collect();
@@ -843,15 +847,12 @@ impl Test for IoTest {
         let mut passed: bool = false; //TODO check if there are not diffs
 
         if self.exp_retvar.is_some() {
-            if status.unwrap() == self.exp_retvar.unwrap() && distance == 0 {
+            if status.unwrap() == self.exp_retvar.unwrap() && distance == 0 && timeout == false {
                 passed = true;
             }
         }
-        let mut timeout = true;
-        if given_output.1 != -99
-        {
-            timeout = false;
-        }
+        
+
         // get vg errors and warnings
         // make path to valgrind file
         //let mut exe_path  = String::from("");
