@@ -753,11 +753,37 @@ impl Test for IoTest {
         let starttime = Instant::now();
 
         let mut vg_flags = self.meta.projdata.valgrind_flags.as_ref()
-                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string(), "-s".to_string()] ).clone();
+                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string() , "-s".to_string()] ).clone();
 
-        vg_flags.push(format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number));
+
+        let exe_path = match std::env::current_dir()
+        {
+            Ok(t) => String::from(t.into_os_string().into_string().expect("")),
+        
+            Err(_e) =>  String::from(""),
+        };
+
+
+        //todo make absolute pathfinding somehow better (abspath required for html)
+        let tmp_vg_path =  self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")).clone();
+
+        let mut vg_filepath: String = String::new();
+
+        if tmp_vg_path != "."
+        {
+            vg_filepath = format!("--log-file=./tmp/{}/vg_log.txt", &self.meta.number);
+        }
+        else
+        {
+            vg_filepath = format!("--log-file={}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
+        }
+
+        let vg_filepath2 = vg_filepath.clone();
+
+        vg_flags.push(vg_filepath2.clone());
         vg_flags.push(format!("./{}", &self.meta.projdata.project_name));
         vg_flags.push(self.argv.clone());
+
 
         let mut run_cmd = Command::new("valgrind")
             // run valgrind with the given program name
@@ -827,33 +853,16 @@ impl Test for IoTest {
                 passed = true;
             }
         }
+        let mut timeout = true;
+        if given_output.1 != -99
+        {
+            timeout = false;
+        }
         // get vg errors and warnings
         // make path to valgrind file
         //let mut exe_path  = String::from("");
 
-        let exe_path = match std::env::current_dir()
-        {
-            Ok(t) => String::from(t.into_os_string().into_string().expect("")),
-        
-            Err(_e) =>  String::from(""),
-        };
 
-
-        //todo make absolute pathfinding somehow better (abspath required for html)
-        let tmp_vg_path =  self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")).clone();
-
-        let mut vg_filepath: String = String::new();
-
-        if tmp_vg_path != "."
-        {
-            vg_filepath = format!("./tmp/{}/vg_log.txt", &self.meta.number);
-        }
-        else
-        {
-            vg_filepath = format!("{}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
-        }
-
-        let vg_filepath2 = vg_filepath.clone();
 
         let verbose = unsafe { VERBOSE };
 
@@ -900,11 +909,7 @@ impl Test for IoTest {
             }
             colored_stdout.reset().unwrap();
         }
-        let mut timeout = true;
-        if given_output.1 != -99
-        {
-            timeout = false;
-        }
+
             
         let valgrind = parse_vg_log(&String::from(vg_filepath)).unwrap_or((-1, -1));
         println!("{:?}", valgrind);
