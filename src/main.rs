@@ -25,7 +25,7 @@ static mut COMPARE_MODE :  [&'static str; 1] = ["\n"];
 static mut VERBOSE : bool = false;
 static NEWLINE : &str = "\n";
 
-static TIMEOUT : i32 = -99;
+static RET_TIMEOUT : i32 = -99;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum TestCaseKind {
@@ -147,7 +147,7 @@ impl TestResult {
                         @ if self.exp_ret.is_some(){
                             tr{
                                 th{:"return value"}
-                                th{:format!("expected : {}, got :{}",self.exp_ret.unwrap_or(-1),self.ret.unwrap_or(TIMEOUT))}
+                                th{:format!("expected : {}, got :{}",self.exp_ret.unwrap_or(-1),self.ret.unwrap_or(RET_TIMEOUT))}
                             }
                         }
                         @ if self.compile_warnings.is_some(){
@@ -630,13 +630,13 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> (String, Option<i32
     let mut cmd = cmd;
 
     let mut output = String::new();
-    let mut _retvar = Some(TIMEOUT);
+    let mut _retvar = Some(RET_TIMEOUT);
     let mut tmp : Vec<u8> =  Vec::new(); 
 
     match cmd.wait_timeout(Duration::from_secs(timeout as u64) ).unwrap() {
         Some(expr) =>
         {
-            _retvar = Some(expr.code().unwrap_or(TIMEOUT));
+            _retvar = Some(expr.code().unwrap_or(RET_TIMEOUT));
         }
         None => {
             _retvar = None;
@@ -713,7 +713,7 @@ impl Test for IoTest {
 
         let exe_path = match std::env::current_dir()
         {
-            Ok(t) => String::from(t.into_os_string().into_string().expect("")),
+            Ok(t) => String::from(t.into_os_string().into_string().unwrap_or(String::new())),
         
             Err(_e) =>  String::from(""),
         };
@@ -726,16 +726,15 @@ impl Test for IoTest {
 
         if tmp_vg_path != "."
         {
-            create_dir_all(format!("{}/tmp/{}", &self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")) , 
+            create_dir_all(format!("{}/valgrind_logs/{}", &self.meta.projdata.makefile_path.clone().unwrap_or(String::from(".")) , 
                                         &self.meta.number) ).expect("could not create tmp folder");
-            _vg_filepath = format!("./tmp/{}/vg_log.txt", &self.meta.number);
+            _vg_filepath = format!("./valgrind_logs/{}/vg_log.txt", &self.meta.number);
             
         }
         else
         {
-            create_dir_all(format!("{}/tmp/{}", exe_path, &self.meta.number) ).expect("could not create tmp folder");
-            _vg_filepath = format!("{}/tmp/{}/vg_log.txt", exe_path, &self.meta.number);
-            
+            create_dir_all(format!("{}/valgrind_logs/{}", exe_path, &self.meta.number) ).expect("could not create tmp folder");
+            _vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", exe_path, &self.meta.number);
         }
 
         // let vg_flags = match self.meta.projdata.valgrind_flags
@@ -771,7 +770,7 @@ impl Test for IoTest {
 
         let vg_filepath2 = _vg_filepath.clone();
 
-        vg_flags.push(format!("--log-file={}", vg_filepath2.clone() ));
+        vg_flags.push(format!("--log-file={}", &vg_filepath2 ));
         vg_flags.push(format!("./{}", &self.meta.projdata.project_name));
         vg_flags.push(self.argv.clone());
 
@@ -806,7 +805,7 @@ impl Test for IoTest {
         let global_timeout = match self.meta.projdata.global_timeout
         {
             Some(to) => to,
-            None => 10, // default is 10 sec
+            None => 5, // default is 5 sec
         };
         //println!("global timeout: {:?}", global_timeout);
         //get output
@@ -816,7 +815,7 @@ impl Test for IoTest {
         
         };
 
-        let given_output = command_timeout(run_cmd, timeout, self.meta.number);
+        let mut given_output = command_timeout(run_cmd, timeout, self.meta.number);
         println!(
             "testcase gave output {} {}",
             self.meta.name, self.meta.number
@@ -826,6 +825,16 @@ impl Test for IoTest {
         if given_output.1.is_some()
         {
             timeout = false;
+        }
+        else
+        {
+            if given_output.0.len() > stdoutstring.len() * 4
+            {
+                let output_length = std::cmp::min( stdoutstring.len()  * 4 ,  given_output.0.len() );
+                given_output.0 = given_output.0.chars().take(output_length).collect();
+                println!("reducing output length because of endless loop!");
+            }
+            
         }
         // TODO options string/array in testcase data
         // TODO ignore if no_trim?
@@ -848,7 +857,6 @@ impl Test for IoTest {
         {
             passed = true;            
         }
-        
 
         // get vg errors and warnings
         // make path to valgrind file
@@ -903,7 +911,7 @@ impl Test for IoTest {
         }
 
             
-        let valgrind = parse_vg_log(&String::from(_vg_filepath)).unwrap_or((-1, -1));
+        let valgrind = parse_vg_log(&_vg_filepath).unwrap_or((-1, -1));
         println!("{:?}", valgrind);
 
         let new_now = Instant::now();
