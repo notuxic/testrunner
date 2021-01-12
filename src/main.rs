@@ -708,7 +708,7 @@ impl Test for IoTest {
         // create temp folder
 
         let mut vg_flags = self.meta.projdata.valgrind_flags.as_ref()
-                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string() , "-s".to_string()] ).clone();
+                                    .unwrap_or(&vec!["--leak-check=full".to_string(), "--track-origins=yes".to_string() ] ).clone();
 
 
         let exe_path = match std::env::current_dir()
