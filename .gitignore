@@ -1,1 +1,13 @@
-target
+## IDE files
+.idea/
+.lvim/
+.lvimrc
+
+## build files
+debug/
+target/
+**/*.rs.bk
+
+## other
+Cargo.lock
+
