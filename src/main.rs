@@ -3,7 +3,7 @@ extern crate horrorshow;
 
 use std::fs::{read_to_string, write};
 use std::process::Command;
-use clap::{App, Arg, crate_authors, crate_description, crate_version};
+use clap::{App, Arg, crate_description, crate_version};
 use crate::tests::generator::TestcaseGenerator;
 
 mod tests;
@@ -12,7 +12,8 @@ mod project;
 fn main() {
     let cli_args = App::new("testrunner")
         .version(crate_version!())
-        .author(crate_authors!())
+        // .author(crate_authors!())
+        .author("Thomas Brunner t.brunner@student.tugraz.at")
         .about(crate_description!())
         .global_setting(clap::AppSettings::DeriveDisplayOrder)
         .arg(Arg::with_name("config")
@@ -29,7 +30,7 @@ fn main() {
             .value_name("DIFF_MODE")
             .default_value("l")
             .possible_values(&["l", "w", "c"])
-            .help("sets mode of diff-comparison\nl : compare outputs line by line\nw : compare outputs word by word\nc : compare outputs char by char"))
+            .help("sets mode of diff-comparison\nl : compare outputs line by line\nw : compare outputs word by word\nc : compare outputs char by char\n"))
         .arg(Arg::with_name("html")
             .short("o")
             .long("html-output")
@@ -48,7 +49,7 @@ fn main() {
             .short("j")
             .long("json-output")
             .takes_value(true)
-            .value_name("JSON_OUT")
+            .value_name("JSON_OUTPUT")
             .default_value("result.json")
             .help("writes testresult in json format to specific file"))
         .arg(Arg::with_name("browser")
@@ -78,25 +79,20 @@ fn main() {
         Err(e) => eprintln!("Error running: {}", e),
     };
 
-    if let Some(json_out) = cli_args.value_of("json") {
-        let output = generator
-            .make_json_report()
-            .expect("could not make json report");
-        write(json_out, output).expect("cannot write json file");
-    }
-
     if let Some(html_out) = cli_args.value_of("html") {
-        let output = generator
-            .make_html_report(diff_mode, false)
-            .expect("could not make html report");
-        write(html_out, output).expect("cannot write html file");
+        if html_out != "NONE" {
+            let output = generator
+                .make_html_report(diff_mode, false)
+                .expect("could not make html report");
+            write(html_out, output).expect("cannot write html file");
 
-        if cli_args.is_present("browser") {
-            println!("open browser");
-            Command::new("xdg-open")
-                .arg(html_out)
-                .spawn()
-                .expect("cannot start xdg-open");
+            if cli_args.is_present("browser") {
+                println!("open browser");
+                Command::new("xdg-open")
+                    .arg(html_out)
+                    .spawn()
+                    .expect("cannot start xdg-open");
+            }
         }
     }
 
@@ -114,6 +110,14 @@ fn main() {
                 .spawn()
                 .expect("cannot start xdg-open");
         }
+    }
+
+    if cli_args.occurrences_of("json") > 0 {
+        let json_out = cli_args.value_of("json").unwrap();
+        let output = generator
+            .make_json_report()
+            .expect("could not make json report");
+        write(json_out, output).expect("cannot write json file");
     }
 }
 
