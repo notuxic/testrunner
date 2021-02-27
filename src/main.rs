@@ -63,8 +63,11 @@ fn main() {
             .help("prints diff to stdout"))
         .get_matches();
 
-    let diff_mode = cli_args.value_of("diff_mode").unwrap();
     let config = read_to_string(cli_args.value_of("config").unwrap()).expect("cannot open or read config file");
+    let diff_mode = match cli_args.value_of("diff_mode").unwrap() {
+        "c" => "",
+        _ => "\n",
+    };
 
     let mut generator = TestcaseGenerator::from_string(&config).expect("could not parse config file");
     generator.set_verbosity(cli_args.is_present("verbose"));

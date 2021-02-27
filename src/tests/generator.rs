@@ -90,111 +90,226 @@ impl TestcaseGenerator {
             return Ok(String::from("did not compile.."));
         }
 
-        let mut passed = 0;
-        let mut failed = 0;
-        for res in self.test_results.iter()
-        {
-            if res.passed == true
-            {
-                passed += 1;
-            }
-            else
-            {
-                failed += 1;
-            }
-        }
-        let percentage_passed = (passed as f32 / self.test_results.len() as f32) * 100.0;
+        let tc_public_num = self.test_results.iter().filter(|test| !test.protected).collect::<Vec<&TestResult>>().len();
+        let tc_public_passed = self.test_results.iter().filter(|test| !test.protected && test.passed).collect::<Vec<&TestResult>>().len();
+        let tc_private_num = self.test_results.iter().filter(|test| test.protected).collect::<Vec<&TestResult>>().len();
+        let tc_private_passed = self.test_results.iter().filter(|test| test.protected && test.passed).collect::<Vec<&TestResult>>().len();
+        let tc_all_num = self.test_results.len();
+        let tc_all_passed = self.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
 
         let result = html! {
             : doctype::HTML;
             html{
                 head{
-                    title:"testreport";
+                    title:"Testreport";
                 }
                 //CSS
                 style{
                     : Raw(
                         r"
                             @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap');
-                            @import url('https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css');body{font-family:'Roboto',
-                            sans-serif;font-weight:300;color:#222;max-width:100em;margin-left:auto;margin-right:auto}body > h1{
-                            text-align:center;font-size:3em;text-transform:capitalize}body > h2{font-size:1.8em;border-bottom:0.1em
-                            solid #666;margin-top:4em}table{border-collapse:collapse}tr:hover{background:#eee}th{padding-left:1.5em;
-                            padding-right:1.5em}#shortreport{margin-top:3em;margin-left:auto;margin-right:auto}#shortreport tr:first-child
-                            th{border-bottom:0.1em solid #222}#shortreport tr:first-child th:nth-child(-n+4){text-transform:capitalize}
-                            #shortreport tr:hover:first-of-type{background:initial}#long_report{margin-top:5em}#long_report > div{
-                            margin-left:5em;margin-right:5em}#long_report > div#description{margin-left:10em;margin-right:10em}#long_report
-                            > div#shortinfo table{margin-left:auto;margin-right:auto}#title > h2{border-bottom:0.1em dashed #444}#shortinfo
-                            {margin-top:2em}#shortinfo > table tr th:first-child{text-transform:capitalize}#shortinfo > table
-                            th:first-of-type{border-right:0.1em solid #222}table td, table td * {vertical-align: top;horizontal-align: top}
-                            #differences{background:#eee;margin-top:3em;padding-left:3em;
-                            width:initial}#differences tr:first-of-type{border-bottom:0.1em solid #222;text-transform:capitalize}#differences
-                            th{padding:0.5em}#differences td{font-family:'Hack', monospace;font-size:0.8em;padding:0.5em;min-width:82ch;max-width:
-                            82ch;word-wrap:anywhere}#differences td:first-child,#differences th:first-child{border-right:0.1em dashed #222}
-                            #missing{background-color:yellowgreen}#wrong{background-color:IndianRed}
-
+                            @import url('https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css');
+                            body {
+                                font-family: 'Roboto', sans-serif;
+                                font-size: 1.02em;
+                                font-weight: 300;
+                                color: #222;
+                                max-width: 100em;
+                                margin-left: auto;
+                                margin-right: auto
+                            }
+                            body > h1 {
+                                text-align: center;
+                                font-size: 3em
+                            }
+                            body > h2 {
+                                font-size: 1.8em;
+                                border-bottom: 0.1em solid #666;
+                                margin-top: 4em
+                            }
+                            table {
+                                border-collapse: collapse
+                            }
+                            tr:hover {
+                                background: #eee
+                            }
+                            th, td {
+                                padding-left: 1em;
+                                padding-right: 1em
+                            }
+                            a {
+                                text-decoration: none;
+                            }
+                            #shortreport {
+                                margin-top: 3em;
+                                margin-left: auto;
+                                margin-right: auto
+                            }
+                            #shortreport td {
+                                text-align: center
+                            }
+                            #shortreport td:first-child {
+                                text-align: left;
+                            }
+                            #shortreport tr:first-child th {
+                                border-bottom: 0.1em solid #222
+                            }
+                            #shortreport tr:hover:first-of-type {
+                                background: initial
+                            }
+                            #long_report {
+                                margin-top: 5em
+                            }
+                            #long_report > div {
+                                margin-left: 5em;
+                                margin-right: 5em
+                            }
+                            #long_report > div#description {
+                                margin-left: 10em;
+                                margin-right: 10em
+                            }
+                            #title > h2 {
+                                display: flex;
+                                border-bottom: 0.1em dashed #444
+                            }
+                            #shortinfo {
+                                margin-top: 2em
+                            }
+                            div#shortinfo table {
+                                margin-left: auto;
+                                margin-right: auto
+                            }
+                            #shortinfo > table th:first-of-type {
+                                border-right: 0.1em solid #222
+                            }
+                            table td, table td * {
+                                vertical-align: top;
+                                horizontal-align: top
+                            }
+                            #differences {
+                                background: #eee;
+                                margin-top: 3em;
+                                padding-left: 3em;
+                                width: initial
+                            }
+                            #differences tr:first-of-type {
+                                border-bottom: 0.1em solid #222
+                            }
+                            #differences th {
+                                padding: 0.5em
+                            }
+                            #differences td {
+                                font-family: 'Hack', monospace;
+                                font-size: 0.82em;
+                                padding: 0.5em;
+                                min-width: 82ch;
+                                max-width: 82ch;
+                                word-wrap: anywhere
+                            }
+                            #differences td:nth-child(2), #differences th:nth-child(2) {
+                                border-left: 0.1em dashed #222
+                            }
+                            #missing {
+                                background-color: yellowgreen
+                            }
+                            #wrong {
+                                background-color: IndianRed
+                            }
+                            .inline-code {
+                                background: #eee;
+                                font-family: 'Hack', monospace;
+                                font-size: 0.85em;
+                                font-weight: 300
+                            }
+                            .link-summary {
+                                display: inline-block;
+                                font-size: 0.85em;
+                                margin-left: auto;
+                            }
+                            .whitespace-hint {
+                                color: #bbb
+                            }
+                            #missing .whitespace-hint {
+                                color: green
+                            }
+                            #wrong .whitespace-hint {
+                                color: darkred
+                            }
                         ")
                 }
                 body{
-                    h1 : "testreport";
+                    h1 : "Testreport";
 
                          @ if !self.binary.info.compiled {
                              h2 : "Program did not compile, no testcases written"
                          }
                          else {
                              // create short report
-                             h2: Raw("<a id=ShortReport></a>Short Report");
-                                 h3: {
-                                     format!("passed {:?} / {:?} ~ {:?} %  (failed: {:?})", passed, self.test_results.len(), percentage_passed , failed)
-                                 };
-                                     table(id="shortreport"){
-                                         th{
-                                             : "name"
+                             h2: Raw("<a id=ShortReport></a>Summary");
+                                 div(id = "shortinfo"){
+                                     table{
+                                         tr{
+                                             th{:"Public Testcases"}
+                                             td{:format!("{} / {} ({}%)", tc_public_passed, tc_public_num, ((tc_public_passed as f32 / tc_public_num as f32) * 10000.0).floor() / 100.0)}
                                          }
-                                         th{
-                                             : "kind"
+                                         tr{
+                                             th{:"Private Testcases"}
+                                             td{:format!("{} / {} ({}%)", tc_private_passed, tc_private_num, ((tc_private_passed as f32 / tc_private_num as f32) * 10000.0).floor() / 100.0)}
                                          }
-                                         th{
-                                             : "passed"
-                                         }
-                                         th{
-                                             :"percentage"
-                                         }
-                                         th{
-                                             :"vg_errors"
-                                         }
-                                         th{
-                                             :"vg_warnings"
-                                         }
-                                         th{
-                                             :"timeout"
-                                         }
-                                         th{
-                                             :"valgrind log"
-                                         }
-                                         |templ| {
-                                             for tc in self.test_results.iter() {
-                                                 match tc.get_html_short(protected_mode) {
-                                                     Ok(res)=> {
-                                                         &mut *templ << Raw(res);
-                                                     }
-                                                     Err(_err) => {
-                                                         &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th><th></th><th></th>"))
-                                                     }
-                                                 }
-                                             }
-
+                                         tr{
+                                             th{:"All Testcases"}
+                                             td{:format!("{} / {} ({}%)", tc_all_passed, tc_all_num, ((tc_all_passed as f32 / tc_all_num as f32) * 10000.0).floor() / 100.0)}
                                          }
                                      }
-                                     h2 : "Detailed Report";
+                                 }
+                                 table(id="shortreport"){
+                                     th{
+                                         : "Name"
+                                     }
+                                     th{
+                                         : "Type"
+                                     }
+                                     th{
+                                         : "Passed"
+                                     }
+                                     th{
+                                         : "Percentage"
+                                     }
+                                     th{
+                                         : "Timeout"
+                                     }
+                                     th{
+                                         : "Valgrind Warnings"
+                                     }
+                                     th{
+                                         : "Valgrind Errors"
+                                     }
+                                     th{
+                                         : "Valgrind Log"
+                                     }
+                                     |templ| {
+                                         for tc in self.test_results.iter() {
+                                             match tc.get_html_short(protected_mode) {
+                                                 Ok(res)=> {
+                                                     &mut *templ << Raw(res);
+                                                 }
+                                                 Err(_err) => {
+                                                     &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th><th></th><th></th>"))
+                                                 }
+                                             }
+                                         }
 
-                                          |templ| {
-                                              for tc in self.test_results.iter() {
-                                                  if !(protected_mode && tc.protected) {
-                                                      &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
-                                                  }
+                                     }
+                                 }
+                                 h2 : "Testcases";
+
+                                      |templ| {
+                                          for tc in self.test_results.iter() {
+                                              if !(protected_mode && tc.protected) {
+                                                  &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
                                               }
                                           }
+                                      }
                          }
                 }
             }
