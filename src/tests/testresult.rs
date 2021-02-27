@@ -198,13 +198,13 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<Str
                                 }
                                 Difference::Rem(ref z) =>
                                 {
-                                    diffleft.push_str(&format!("<span id =\"wrong\">{}{}</span>",
+                                    diffleft.push_str(&format!("<span id =\"diff-add\">{}{}</span>",
                                             z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));//z.replace(" ", "&nbsp").replace("\n", "\\n&nbsp<br>"), line_end));
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
-                                    diffright.push_str(&format!("<span id =\"missing\">{}{}</span>",
+                                    diffright.push_str(&format!("<span id =\"diff-remove\">{}{}</span>",
                                             z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));//
                                 }
 

@@ -209,10 +209,10 @@ impl TestcaseGenerator {
                             #differences td:nth-child(2), #differences th:nth-child(2) {
                                 border-left: 0.1em dashed #222
                             }
-                            #missing {
+                            #diff-add {
                                 background-color: yellowgreen
                             }
-                            #wrong {
+                            #diff-remove {
                                 background-color: IndianRed
                             }
                             .inline-code {
@@ -229,10 +229,10 @@ impl TestcaseGenerator {
                             .whitespace-hint {
                                 color: #bbb
                             }
-                            #missing .whitespace-hint {
+                            #diff-add .whitespace-hint {
                                 color: green
                             }
-                            #wrong .whitespace-hint {
+                            #diff-remove .whitespace-hint {
                                 color: darkred
                             }
                         ")
