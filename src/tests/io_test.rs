@@ -313,7 +313,7 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
             }
         },
         Err(err) => {
-            println!("Cannot open vglog :{}\n{}", filepath, err);
+            println!("Cannot open valgrind log: {}\n{}", filepath, err);
             return Err(GenerationError::VgLogNotFound);
         }
     }
@@ -332,7 +332,7 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> (String, Option<i32
         }
         None => {
             _retvar = None;
-            println!("killing {} beacause of timeout", number);
+            println!("Killing testcase {} because of timeout", number);
             cmd.kill().expect("Upps, can't kill this one");
         }
     }
