@@ -111,7 +111,6 @@ impl TestcaseGenerator {
                             @import url('https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css');
                             body {
                                 font-family: 'Roboto', sans-serif;
-                                font-size: 1.02em;
                                 font-weight: 300;
                                 color: #222;
                                 max-width: 100em;
@@ -218,12 +217,14 @@ impl TestcaseGenerator {
                             .inline-code {
                                 background: #eee;
                                 font-family: 'Hack', monospace;
-                                font-size: 0.85em;
-                                font-weight: 300
+                                font-size: 0.84em;
+                                font-weight: 300;
+                                vertical-align: baseline;
                             }
                             .link-summary {
                                 display: inline-block;
-                                font-size: 0.85em;
+                                font-size: 0.8em;
+                                vertical-align: baseline;
                                 margin-left: auto;
                             }
                             .whitespace-hint {
