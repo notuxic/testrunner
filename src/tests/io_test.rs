@@ -27,7 +27,7 @@ pub struct IoTest {
 
 impl Test for IoTest {
     fn run(&self) -> Result<TestResult, GenerationError> {
-        println!("starting testcase {}", self.meta.name);
+        println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
         let mut stdinstring: String = String::new();
         if !self.in_file.is_empty() {
             match read_to_string(&self.in_file) {
@@ -35,7 +35,7 @@ impl Test for IoTest {
                     stdinstring.clone_from(&content);
                 }
                 Err(err) => {
-                    println!("Cannot open stdinfile, fallback to none \n {:?}", err);
+                    println!("Cannot open stdinfile, fallback to none \n{:?}", err);
                 }
             }
         } else if !self.in_string.is_empty() {
@@ -67,7 +67,7 @@ impl Test for IoTest {
                     stdoutstring = content;
                 }
                 Err(err) => {
-                    println!("Cannot open stdout, fallback to none \n {:?}", err);
+                    println!("Cannot open stdout, fallback to none \n{:?}", err);
                 }
             }
         } else if !self.exp_string.is_empty() {
@@ -138,10 +138,7 @@ impl Test for IoTest {
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
         let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
-        println!(
-            "testcase gave output {} {}",
-            self.meta.name, self.meta.number
-        );
+        println!("Got output from testcase {}", self.meta.number);
 
         let mut had_timeout = true;
         if retvar.is_some() {
@@ -151,7 +148,7 @@ impl Test for IoTest {
             if given_output.len() > stdoutstring.len() * 4 {
                 let output_length = std::cmp::min( stdoutstring.len()  * 4 ,  given_output.len() );
                 given_output = given_output.chars().take(output_length).collect();
-                println!("reducing output length because of endless loop!");
+                println!("Reducing output length because of endless loop!");
             }
 
         }
@@ -165,11 +162,13 @@ impl Test for IoTest {
 
         if self.meta.projdef.verbose && distance != 0
         {
-            println!("--------------------------------");
-            println!("Distance: {:?}", distance);
-            println!("Wanted Output:\n{:?}", stdoutstring);
-            println!("--------------------------------");
+            println!("Diff-Distance: {:?}", distance);
+            println!("------ START Reference ------");
+            println!("Reference Output:\n{:?}", stdoutstring);
+            println!("------ END Reference ------");
+            println!("------ START Yours ------");
             println!("Your Output:\n{:?}", given_output);
+            println!("------ END Yours ------");
         }
 
         // prints diff with colors to terminal
@@ -209,11 +208,11 @@ impl Test for IoTest {
 
 
         let valgrind = parse_vg_log(&vg_filepath).unwrap_or((-1, -1));
-        println!("{:?}", valgrind);
+        println!("Valgrind warnings: {:?}\nValgrind errors: {:?}", valgrind.0, valgrind.1);
 
         let endtime = Instant::now();
-        println!("testcase took {:?}", endtime.duration_since(starttime));
-        println!("done with {}", self.meta.number);
+        println!("Testcase took {:?}", endtime.duration_since(starttime));
+        println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
 
         Ok(TestResult {
             diff : Some(changeset),

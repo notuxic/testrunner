@@ -16,7 +16,7 @@ pub struct UnitTest {
 impl Test for UnitTest {
     fn run(&self) -> Result<TestResult, GenerationError> {
         if let Err(e) = run(self) {
-            println!("Error running unit test: {}", e);
+            println!("Error running unit test {}: {}", self.meta.number, e);
             return Err(GenerationError::ConfigErrorUnit);
         }
 
