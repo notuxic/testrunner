@@ -132,6 +132,9 @@ impl TestcaseGenerator {
                             tr:hover {
                                 background: #eee
                             }
+                            th {
+                                text-align: right
+                            }
                             th, td {
                                 padding-left: 1em;
                                 padding-right: 1em
@@ -144,7 +147,7 @@ impl TestcaseGenerator {
                                 margin-left: auto;
                                 margin-right: auto
                             }
-                            #shortreport td {
+                            #shortreport th, #shortreport td {
                                 text-align: center
                             }
                             #shortreport td:first-child {
@@ -195,6 +198,7 @@ impl TestcaseGenerator {
                                 border-bottom: 0.1em solid #222
                             }
                             #differences th {
+                                text-align: center;
                                 padding: 0.5em
                             }
                             #differences td {
@@ -224,6 +228,7 @@ impl TestcaseGenerator {
                             .link-summary {
                                 display: inline-block;
                                 font-size: 0.8em;
+                                font-weight: normal;
                                 vertical-align: baseline;
                                 margin-left: auto;
                             }
