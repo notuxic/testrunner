@@ -66,6 +66,7 @@ fn main() {
     let config = read_to_string(cli_args.value_of("config").unwrap()).expect("cannot open or read config file");
     let diff_mode = match cli_args.value_of("diff_mode").unwrap() {
         "c" => "",
+        "w" => " ",
         _ => "\n",
     };
 
