@@ -3,7 +3,7 @@ extern crate horrorshow;
 
 use std::fs::{read_to_string, write};
 use std::process::Command;
-use clap::{App, Arg, crate_description, crate_version};
+use clap::{App, Arg, crate_authors, crate_description, crate_version};
 use crate::tests::generator::TestcaseGenerator;
 
 mod tests;
@@ -12,8 +12,7 @@ mod project;
 fn main() {
     let cli_args = App::new("testrunner")
         .version(crate_version!())
-        // .author(crate_authors!())
-        .author("Thomas Brunner t.brunner@student.tugraz.at")
+        .author(crate_authors!(",\n"))
         .about(crate_description!())
         .global_setting(clap::AppSettings::DeriveDisplayOrder)
         .arg(Arg::with_name("config")
