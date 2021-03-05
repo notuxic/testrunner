@@ -86,16 +86,13 @@ impl TestcaseGenerator {
     }
 
     pub fn make_html_report(&self, compare_mode : &str, protected_mode : bool) -> Result<String, GenerationError> {
-        if !self.binary.info.compiled {
-            return Ok(String::from("did not compile.."));
-        }
-
         let tc_public_num = self.test_results.iter().filter(|test| !test.protected).collect::<Vec<&TestResult>>().len();
         let tc_public_passed = self.test_results.iter().filter(|test| !test.protected && test.passed).collect::<Vec<&TestResult>>().len();
         let tc_private_num = self.test_results.iter().filter(|test| test.protected).collect::<Vec<&TestResult>>().len();
         let tc_private_passed = self.test_results.iter().filter(|test| test.protected && test.passed).collect::<Vec<&TestResult>>().len();
         let tc_all_num = self.test_results.len();
         let tc_all_passed = self.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
+        let compiler_output = self.binary.info.errors.clone().unwrap_or(String::from("<i>failed fetching compiler output!</i>"));
 
         let result = html! {
             : doctype::HTML;
@@ -175,6 +172,8 @@ impl TestcaseGenerator {
                                 border-bottom: 0.1em dashed #444
                             }
                             #shortinfo {
+                                margin-left: auto;
+                                margin-right: auto;
                                 margin-top: 2em
                             }
                             div#shortinfo table {
@@ -209,6 +208,10 @@ impl TestcaseGenerator {
                                 max-width: 82ch;
                                 word-wrap: anywhere
                             }
+                            #differences #compiler {
+                                min-width: 122ch;
+                                max-width: 122ch;
+                            }
                             #differences td:nth-child(2), #differences th:nth-child(2) {
                                 border-left: 0.1em dashed #222
                             }
@@ -241,30 +244,73 @@ impl TestcaseGenerator {
                             #diff-remove .whitespace-hint {
                                 color: darkred
                             }
+                            #failed {
+                                width: 61em;
+                                margin-top: 5em;
+                                margin-left: auto;
+                                margin-right: auto
+                            }
+                            .warning {
+                                font-size: large;
+                                background-color: #ff000033;
+                                color: darkred;
+                                padding: 0.5em;
+                                border-left: darkred 0.4em solid
+                            }
+                            #flex-container {
+                                display: flex;
+                                flex-direction: row;
+                                justify-content: center;
+                                align-items: center
+                            }
                         ")
                 }
                 body{
                     h1 : "Testreport";
-
                          @ if !self.binary.info.compiled {
-                             h2 : "Program did not compile, no testcases written"
+                             div(id="failed") {
+                                 span(class="warning") {:"Could not compile project, no testcases were run!"}
+                                 table(id="differences") {
+                                     tr{
+                                         th{:"Compiler Output"}
+                                     }
+                                     tr{
+                                         td(id="compiler") {:Raw(format!("{}", compiler_output.replace("\n", "<br>").replace(" ", "&nbsp;")))}
+                                     }
+                                 }
+                             }
                          }
                          else {
                              // create short report
-                             h2: Raw("<a id=ShortReport></a>Summary");
-                                 div(id = "shortinfo"){
-                                     table{
-                                         tr{
-                                             th{:"Public Testcases"}
-                                             td{:format!("{} / {} ({}%)", tc_public_passed, tc_public_num, ((tc_public_passed as f32 / tc_public_num as f32) * 10000.0).floor() / 100.0)}
+                             h2{:Raw("<a id=shortreport></a>Summary")}
+                                 div(id="flex-container") {
+                                     @ if self.binary.info.warnings.is_some() {
+                                         table(id="shortreport") {
+                                             tr{
+                                                 th{:"Compiler Warning"}
+                                                 th{:"Quantity"}
+                                             }
+                                             |templ| {
+                                                 for (warn, amount) in self.binary.info.warnings.clone().unwrap().iter() {
+                                                     &mut *templ << Raw(format!("<tr><td>{}</td><td>{}</td></tr>", warn, amount));
+                                                 }
+                                             }
                                          }
-                                         tr{
-                                             th{:"Private Testcases"}
-                                             td{:format!("{} / {} ({}%)", tc_private_passed, tc_private_num, ((tc_private_passed as f32 / tc_private_num as f32) * 10000.0).floor() / 100.0)}
-                                         }
-                                         tr{
-                                             th{:"All Testcases"}
-                                             td{:format!("{} / {} ({}%)", tc_all_passed, tc_all_num, ((tc_all_passed as f32 / tc_all_num as f32) * 10000.0).floor() / 100.0)}
+                                     }
+                                     div(id="shortinfo"){
+                                         table{
+                                             tr{
+                                                 th{:"Public Testcases"}
+                                                 td{:format!("{} / {} ({}%)", tc_public_passed, tc_public_num, ((tc_public_passed as f32 / tc_public_num as f32) * 10000.0).floor() / 100.0)}
+                                             }
+                                             tr{
+                                                 th{:"Private Testcases"}
+                                                 td{:format!("{} / {} ({}%)", tc_private_passed, tc_private_num, ((tc_private_passed as f32 / tc_private_num as f32) * 10000.0).floor() / 100.0)}
+                                             }
+                                             tr{
+                                                 th{:"All Testcases"}
+                                                 td{:format!("{} / {} ({}%)", tc_all_passed, tc_all_num, ((tc_all_passed as f32 / tc_all_num as f32) * 10000.0).floor() / 100.0)}
+                                             }
                                          }
                                      }
                                  }
@@ -307,15 +353,15 @@ impl TestcaseGenerator {
 
                                      }
                                  }
-                                 h2 : "Testcases";
+                             h2 : "Testcases";
 
-                                      |templ| {
-                                          for tc in self.test_results.iter() {
-                                              if !(protected_mode && tc.protected) {
-                                                  &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
-                                              }
+                                  |templ| {
+                                      for tc in self.test_results.iter() {
+                                          if !(protected_mode && tc.protected) {
+                                              &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
                                           }
                                       }
+                                  }
                          }
                 }
             }

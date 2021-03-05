@@ -1,4 +1,5 @@
 use std::fmt;
+use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use regex::Regex;
 use super::definition::ProjectDefinition;
@@ -25,8 +26,8 @@ pub enum CompileError {
 
 #[derive(Clone, Debug)]
 pub struct CompileInfo {
-    pub warnings: i32,
-    pub errors: i32,
+    pub warnings: Option<HashMap<String, i32>>,
+    pub errors: Option<String>,
     pub compiled: bool,
 }
 
@@ -41,8 +42,8 @@ impl Binary {
         let retvar = Binary {
             project_definition: proj_def.clone(),
             info: CompileInfo {
-                errors: 0,
-                warnings: 0,
+                errors: None,
+                warnings: None,
                 compiled: false,
             },
         };
@@ -72,43 +73,35 @@ impl Binary {
         match make_cmd.output() {
             Ok(res) => {
                 let errorstring = String::from_utf8(res.stderr).unwrap_or_default();
-                let re = Regex::new(
-                    r"(?P<warn>[0-1]*) warnings? and (?P<err>[0-1]*) errors? generated.",
-                )
-                    .unwrap();
-                let re2 = Regex::new(r"(?P<warn>[0-1]*) warnings? generated.").unwrap();
+                let re_warnings = Regex::new(r"warning: .*? \[-W(?P<warn>[^\]]+)\]").unwrap();
                 if res.status.code().unwrap_or(-1) != 0 {
                     self.info.compiled = false;
-                    let issues = re.captures_iter(&errorstring).last(); // last match is the best
-                    match issues {
-                        Some(found_issues) => {
-                            self.info.warnings = found_issues["warn"].parse().unwrap_or(-1);
-                            self.info.errors = found_issues["err"].parse().unwrap_or(-1);
-                        }
-                        None => {
-                            return Err(CompileError::NoIssuesReported);
-                        }
-                    }
-                } else {
+                    self.info.errors = Some(errorstring);
+                    println!("Compilation failed!");
+                }
+                else {
                     self.info.compiled = true;
-                    println!("looks good");
+                    println!("Compilation successful!");
                     //checking for warnings...
-                    let issues = re2.captures_iter(&errorstring).last();
-                    match issues {
-                        Some(found_warnings) => {
-                            //warnings found => parse them
-                            println!("{:?}", &found_warnings["warn"]);
-                            self.info.warnings = found_warnings["warn"].parse().unwrap_or(-1);
+                    let mut warnings = HashMap::<String, i32>::new();
+                    for cap in re_warnings.captures_iter(&errorstring) {
+                        let warn = String::from(&cap["warn"]);
+                        let entry = warnings.entry(warn).or_insert(0);
+                        *entry += 1;
+                    }
+                    if !warnings.is_empty() {
+                        // each entry was detected twice, thus half the amount now
+                        println!("Detected compiler warnings:");
+                        for (warn, amount) in warnings.iter_mut() {
+                            *amount /= 2;
+                            println!("  {}: {}", warn, *amount);
                         }
-                        None => {
-                            self.info.errors = 0;
-                            self.info.warnings = 0;
-                        }
+                        self.info.warnings = Some(warnings);
                     }
                 }
             }
             Err(err) => {
-                println!("noo {:?}", err);
+                println!("Compilation failed: {:?}", err);
                 return Err(CompileError::MakeFailed);
             }
         }
