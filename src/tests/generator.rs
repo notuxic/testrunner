@@ -283,7 +283,7 @@ impl TestcaseGenerator {
                          }
                          else {
                              // create short report
-                             h2{:Raw("<a id=shortreport></a>Summary")}
+                             h2{:Raw("<a id=\"summary\"></a>Summary")}
                                  div(id="flex-container") {
                                      @ if self.binary.info.warnings.is_some() {
                                          table(id="shortreport") {

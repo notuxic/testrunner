@@ -58,7 +58,7 @@ impl TestResult {
             div(id="long_report") {
                 div(id = "title") {
                     h2 {
-                        : Raw(format!("#{:0>2}:&nbsp;<a id={}></a>{} <a class=\"link-summary\" href=\"#ShortReport\">(back to summary)</a>", &self.number, &self.name, &self.name))
+                        : Raw(format!("#{:0>2}:&nbsp;<a id={}></a>{} <a class=\"link-summary\" href=\"#summary\">(back to summary)</a>", &self.number, &self.name, &self.name))
                     }
                 }
                 div(id="description") {
