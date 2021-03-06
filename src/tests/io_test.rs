@@ -217,7 +217,6 @@ impl Test for IoTest {
         Ok(TestResult {
             diff : Some(changeset),
             //diff: Some(diff),
-            compile_warnings: None,
             implemented: None,
             passed,
             result: given_output.clone(),

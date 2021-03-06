@@ -23,7 +23,6 @@ impl Test for UnitTest {
         Ok(TestResult {
             //diff2 : None,
             distance_percentage: None,
-            compile_warnings: None,
             kind: TestCaseKind::UnitTest,
             diff: None,
             implemented: None,

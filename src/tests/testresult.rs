@@ -25,7 +25,6 @@ pub struct TestResult {
     pub command_used: String,
     pub used_input: String,
     pub timeout: bool,
-    pub compile_warnings: Option<String>,
     pub ret: Option<i32>,
     pub exp_ret: Option<i32>,
     pub passed: bool,
@@ -50,7 +49,6 @@ impl TestResult {
             "vg_errors": self.vg_errors,
             "timeout": self.timeout,
             "result": self.result.clone(),
-            "compile_warnings": self.compile_warnings.clone().unwrap_or(String::from("")),
             "protected" : self.protected,
         }))
     }
@@ -106,13 +104,6 @@ impl TestResult {
                             tr {
                                 th{:"Return Value"}
                                 td{:Raw(format!("expected: <span class=\"inline-code\">{}</span>, got: <span class=\"inline-code\">{}</span>", self.exp_ret.unwrap_or(-1), self.ret.unwrap_or(-99)))}
-                            }
-                        }
-
-                        @ if self.compile_warnings.is_some(){
-                            tr {
-                                th {:"Compile Warnings"}
-                                td {:format!("{}", self.compile_warnings.clone().unwrap())}
                             }
                         }
 

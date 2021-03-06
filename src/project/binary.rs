@@ -2,6 +2,7 @@ use std::fmt;
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use regex::Regex;
+use serde_derive::Serialize;
 use super::definition::ProjectDefinition;
 
 #[derive(Debug)]
@@ -24,7 +25,7 @@ pub enum CompileError {
     NoIssuesReported,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CompileInfo {
     pub warnings: Option<HashMap<String, i32>>,
     pub errors: Option<String>,

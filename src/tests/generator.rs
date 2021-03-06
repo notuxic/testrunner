@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use horrorshow::Raw;
 use horrorshow::helper::doctype;
 use super::test::Test;
@@ -288,7 +289,7 @@ impl TestcaseGenerator {
                                          table(id="shortreport") {
                                              tr{
                                                  th{:"Compiler Warning"}
-                                                 th{:"Quantity"}
+                                                 th{:"Occurences"}
                                              }
                                              |templ| {
                                                  for (warn, amount) in self.binary.info.warnings.clone().unwrap().iter() {
@@ -371,12 +372,15 @@ impl TestcaseGenerator {
     }
 
     pub fn make_json_report(&self) -> Result<String, GenerationError> {
+        let mut json: HashMap<String, serde_json::Value> = HashMap::new();
         let mut results: Vec<serde_json::Value> = vec![];
         for tc in self.test_results.iter() {
             results.push(tc.get_json()?);
         }
+        json.insert(String::from("testcases"), serde_json::to_value(results).unwrap());
+        json.insert(String::from("binary"), serde_json::to_value(self.binary.info.clone()).unwrap());
 
-        serde_json::to_string_pretty(&results).map_err(|_| GenerationError::VgLogParseError)
+        serde_json::to_string_pretty(&json).map_err(|_| GenerationError::VgLogParseError)
     }
 
     pub fn set_verbosity(&mut self, verbose: bool) {
