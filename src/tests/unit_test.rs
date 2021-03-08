@@ -15,10 +15,25 @@ pub struct UnitTest {
 
 impl Test for UnitTest {
     fn run(&self) -> Result<TestResult, GenerationError> {
+        if self.meta.projdef.protected_mode && self.meta.protected {
+            println!("\nStarting testcase {}: ********", self.meta.number);
+        }
+        else {
+            println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
+        }
+
         if let Err(e) = run(self) {
             println!("Error running unit test {}: {}", self.meta.number, e);
             return Err(GenerationError::ConfigErrorUnit);
         }
+
+        if self.meta.projdef.protected_mode && self.meta.protected {
+            println!("\nFinished testcase {}: ********", self.meta.number);
+        }
+        else {
+            println!("\nFinished testcase {}: {}", self.meta.number, self.meta.name);
+        }
+
 
         Ok(TestResult {
             //diff2 : None,

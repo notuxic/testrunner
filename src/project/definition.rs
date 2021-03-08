@@ -12,5 +12,7 @@ pub struct ProjectDefinition {
     pub verbose: bool,
     #[serde(skip)]
     pub diff_mode: String,
+    #[serde(skip)]
+    pub protected_mode: bool,
 }
 

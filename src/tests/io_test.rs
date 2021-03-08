@@ -27,7 +27,13 @@ pub struct IoTest {
 
 impl Test for IoTest {
     fn run(&self) -> Result<TestResult, GenerationError> {
-        println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
+        if self.meta.projdef.protected_mode && self.meta.protected {
+            println!("\nStarting testcase {}: ********", self.meta.number);
+        }
+        else {
+            println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
+        }
+
         let mut stdinstring: String = String::new();
         if !self.in_file.is_empty() {
             match read_to_string(&self.in_file) {
@@ -212,7 +218,13 @@ impl Test for IoTest {
 
         let endtime = Instant::now();
         println!("Testcase took {:?}", endtime.duration_since(starttime));
-        println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
+        if self.meta.projdef.protected_mode && self.meta.protected {
+            println!("Finished testcase {}: ********", self.meta.number);
+        }
+        else {
+            println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
+        }
+
 
         Ok(TestResult {
             diff : Some(changeset),

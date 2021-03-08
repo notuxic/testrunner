@@ -72,6 +72,8 @@ fn main() {
     let mut generator = TestcaseGenerator::from_string(&config).expect("could not parse config file");
     generator.set_verbosity(cli_args.is_present("verbose"));
     generator.set_diff_mode(diff_mode.to_string());
+    generator.set_protected_mode(cli_args.occurrences_of("prot-html") > 0);
+
     match generator.generate_generateables() {
         Ok(_) => println!("Done generating"),
         Err(e) => eprintln!("Error generating: {}", e),

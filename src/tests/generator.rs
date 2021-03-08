@@ -390,5 +390,9 @@ impl TestcaseGenerator {
     pub fn set_diff_mode(&mut self, diff_mode: String) {
         self.config.project_definition.diff_mode = diff_mode;
     }
+
+    pub fn set_protected_mode(&mut self, prot: bool) {
+        self.config.project_definition.protected_mode = prot;
+    }
 }
 
