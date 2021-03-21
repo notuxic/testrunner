@@ -151,6 +151,9 @@ impl TestResult {
 
     pub fn get_html_short(&self, protected_mode : bool) -> Result<String, GenerationError> {
         let name = self.name.replace("\"", "");
+        if protected_mode && self.protected {
+            return Ok(String::from(""))
+        }
         let retvar = box_html! {
             tr{
                 td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=#{}>#{:0>2}:&nbsp;{}</a>", &name, &self.number, &name)) }}
