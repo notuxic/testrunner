@@ -79,10 +79,9 @@ impl Test for IoTest {
         } else if !self.exp_string.is_empty() {
             stdoutstring = self.exp_string.clone();
         }
-        
-        let vg_dirpath = format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number);
-        create_dir_all(vg_dirpath.clone()).expect("could not create valgrind_log folder");//format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number)).expect("could not create valgrind_log folder");
-        let vg_filepath = format!("{}/vg_log.txt", vg_dirpath);
+
+        create_dir_all(format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number)).expect("could not create valgrind_log folder");
+        let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number);
 
         let mut vg_flags = match &self.meta.projdef.valgrind_flags {
             Some(to) => to.clone(),
@@ -152,8 +151,8 @@ impl Test for IoTest {
             had_timeout = false;
         }
         else {
-            if given_output.len() > stdoutstring.len() * 2 {
-                let output_length = std::cmp::min( stdoutstring.len()  * 2 ,  given_output.len() );
+            if given_output.len() > stdoutstring.len() * 4 {
+                let output_length = std::cmp::min( stdoutstring.len()  * 4 ,  given_output.len() );
                 given_output = given_output.chars().take(output_length).collect();
                 println!("Reducing output length because of endless loop!");
             }
@@ -215,11 +214,7 @@ impl Test for IoTest {
 
 
         let valgrind = parse_vg_log(&vg_filepath).unwrap_or((-1, -1));
-        if !self.meta.protected {
-            println!("Valgrind warnings: {:?}\nValgrind errors: {:?}", valgrind.0, valgrind.1);
-        } else if std::path::Path::new(&vg_filepath).exists() {
-            std::fs::remove_dir_all(std::path::Path::new(&vg_dirpath)).expect("could not delete path");
-        }
+        println!("Valgrind warnings: {:?}\nValgrind errors: {:?}", valgrind.0, valgrind.1);
 
         let endtime = Instant::now();
         println!("Testcase took {:?}", endtime.duration_since(starttime));
@@ -229,7 +224,6 @@ impl Test for IoTest {
         else {
             println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
         }
-
 
 
         Ok(TestResult {
