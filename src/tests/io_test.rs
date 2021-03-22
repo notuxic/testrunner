@@ -237,7 +237,7 @@ impl Test for IoTest {
             vg_warnings: valgrind.0,
             vg_errors: valgrind.1,
             vg_logfile: vg_filepath,
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().concat())),
+            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().join(" "))),
             used_input: stdinstring,
             timeout: had_timeout,
             name: self.meta.name.clone(),

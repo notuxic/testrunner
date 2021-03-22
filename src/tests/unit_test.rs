@@ -48,7 +48,7 @@ impl Test for UnitTest {
             vg_errors: 0,
             vg_warnings: 0,
             vg_logfile: String::from(""),
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().concat())),
+            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().join(" "))),
             used_input: String::from(""),
             timeout: false,
             name: self.meta.name.clone(),
