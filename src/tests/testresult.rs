@@ -137,10 +137,9 @@ impl TestResult {
                                         table(id="differences") {
                                             |templ| {
                                                 &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>", self.used_input
-                                                    .replace("\n", "<br>")
                                                     .replace(" ", "<span class=\"whitespace-hint\">&middot;</span>")
-                                                    .replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>")
-                                                    .replace("\n", "<span class=\"whitespace-hint\">&#x21b5;</span>")));
+                                                    .replace("\n", "<span class=\"whitespace-hint\">&#x21b5;</span><br>")
+                                                    .replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>")));
                                             }
                                         }
                                     }
