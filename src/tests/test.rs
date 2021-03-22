@@ -54,7 +54,7 @@ pub trait Test {
         Self: Sized;
     //fn report(&self) -> Result<String,GenerationError>;
     fn get_test_meta(&self) -> &TestMeta;
-    fn get_add_diff(&self) -> Option<String> {
+    fn get_add_diff(&self) -> Option<(String, i32)> {
         let test_meta = self.get_test_meta();
         if test_meta.add_diff_kind.is_some() {
             let mut fd_user = File::open(test_meta.add_in_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_in_file.as_ref().unwrap()));
@@ -75,7 +75,7 @@ pub trait Test {
 
                     let changeset = Changeset::new(&buf_ref, &buf_user, &test_meta.projdef.diff_mode);
                     return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode) {
-                        Ok(text) => Some(text),
+                        Ok(text) => Some((text, changeset.distance)),
                         Err(_) => None,
                     }
                 },

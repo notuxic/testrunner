@@ -24,7 +24,7 @@ fn decdata_to_hexdump(decdata: &str, offset: &mut usize) -> String {
     hexdump
 }
 
-pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<String, HTMLError> {
+pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i32), HTMLError> {
     let mut ref_str = String::with_capacity(reference.len() * 4);
     let mut giv_str = String::with_capacity(given.len() * 4);
 
@@ -39,6 +39,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<String, HTM
     giv_str.pop();
 
     let changeset = Changeset::new(&ref_str, &giv_str, " ");
+    let distance = changeset.distance;
 
     let retvar = format!(
         "{}",
@@ -79,7 +80,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<String, HTM
                 }
             }
     });
-    Ok(String::from(retvar))
+    Ok((String::from(retvar), distance))
 }
 
 pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<String, HTMLError> {

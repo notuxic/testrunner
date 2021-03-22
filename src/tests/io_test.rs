@@ -168,7 +168,7 @@ impl Test for IoTest {
         let status = retvar; // TODO refactor
         let add_diff = self.get_add_diff();
         let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap()
-            && distance == 0 && !had_timeout; //TODO check if there are not diffs
+            && distance == 0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
 
         if self.meta.projdef.verbose && distance != 0
         {
@@ -230,9 +230,9 @@ impl Test for IoTest {
 
 
         Ok(TestResult {
-            diff : Some(changeset),
+            diff: Some(changeset),
             //diff: Some(diff),
-            add_diff,
+            add_diff: match add_diff { Some(d) => Some(d.0), None => None },
             implemented: None,
             passed,
             result: given_output.clone(),
