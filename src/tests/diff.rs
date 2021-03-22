@@ -2,7 +2,7 @@ use difference::{Changeset, Difference};
 use horrorshow::Raw;
 use super::testresult::HTMLError;
 
-fn decdata_to_hexdump(decdata: &str, offset: &mut usize) -> String {
+fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) -> String {
     // let hexdata: Vec<u8> = hex_to_u8(hexdata);
     let decdata: Vec<u8> = decdata.split(' ').map(|c| c.parse::<u8>().unwrap()).collect();
     let mut hexdump = String::with_capacity(81);
@@ -20,6 +20,7 @@ fn decdata_to_hexdump(decdata: &str, offset: &mut usize) -> String {
         }).collect::<String>();
         hexdump.push_str(&format!("0x{:0>7X}  &#x2502  {:<47}  &#x2502  {:<16}<br>", offset, hex, ascii).replace(" ", "&nbsp;"));
         *offset += chunk.len();
+        *num_lines += 1;
     }
     hexdump
 }
@@ -49,6 +50,8 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                     |templ| {
                         let mut diffright = String::new();
                         let mut diffleft = String::new();
+                        let mut linesleft: isize = 0;
+                        let mut linesright: isize = 0;
                         let mut offright = 0;
                         let mut offleft = 0;
 
@@ -56,21 +59,35 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                             match *c {
                                 Difference::Same(ref z)=>
                                 {
-                                    diffright.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offright)));
-                                    diffleft.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offleft)));
+                                    diffright.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offright, &mut linesright)));
+                                    diffleft.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
                                 }
                                 Difference::Rem(ref z) =>
                                 {
                                     diffleft.push_str(&format!("<span id =\"diff-add\">{}\n</span>",
-                                            decdata_to_hexdump(z, &mut offleft)));
+                                            decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
                                     diffright.push_str(&format!("<span id =\"diff-remove\">{}\n</span>",
-                                            decdata_to_hexdump(z, &mut offright)));
+                                            decdata_to_hexdump(z, &mut offright, &mut linesright)));
                                 }
+                            }
 
+                            let linesdiff = linesleft - linesright;
+                            if linesdiff > 0 {
+                                for _ in 0..linesdiff {
+                                    diffright.push_str(&format!("{}&#x2502{}&#x2502{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                    linesright += 1;
+                                }
+                            }
+                            else if linesdiff < 0 {
+                                let linesdiff = linesdiff * -1;
+                                for _ in 0..linesdiff {
+                                    diffleft.push_str(&format!("{}&#x2502{}&#x2502{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                    linesleft += 1;
+                                }
                             }
                         }
 

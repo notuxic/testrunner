@@ -64,8 +64,6 @@ fn main() {
             .help("prints diff to stdout"))
         .get_matches();
 
-    println!("config: {:?}", cli_args.value_of("config"));
-
     let config = read_to_string(cli_args.value_of("config").unwrap()).expect( &format!("cannot open or read config file {}", cli_args.value_of("config").unwrap()));
     let diff_mode = match cli_args.value_of("diff_mode").unwrap() {
         "c" => "",
