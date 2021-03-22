@@ -20,7 +20,7 @@ pub struct IoTest {
     in_string: String,
     exp_string: String,
     binary: Binary,
-    argv: String,
+    argv: Vec<String>,
     exp_retvar: Option<i32>,
     env_vars: Option<String>,
 }
@@ -90,7 +90,7 @@ impl Test for IoTest {
 
         vg_flags.push(format!("--log-file={}", &vg_filepath ));
         vg_flags.push(format!("./{}", &self.meta.projdef.project_name));
-        vg_flags.push(self.argv.clone());
+        vg_flags.append(&mut self.argv.clone() ); //.push(self.argv.clone());
 
         // // run assignment file compiled with fsanitize
         // let mut run_cmd = Command::new(format!("./{}", &self.meta.projdata.project_name))
@@ -237,7 +237,7 @@ impl Test for IoTest {
             vg_warnings: valgrind.0,
             vg_errors: valgrind.1,
             vg_logfile: vg_filepath,
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv)),
+            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().concat())),
             used_input: stdinstring,
             timeout: had_timeout,
             name: self.meta.name.clone(),
@@ -280,7 +280,7 @@ impl Test for IoTest {
             meta,
             binary: binary.unwrap().clone(),
             exp_retvar: testcase.exp_retvar,
-            argv: testcase.args.as_ref().unwrap_or(&String::new()).clone(),
+            argv: testcase.args.as_ref().unwrap_or(&vec![String::new()]).clone(), //testcase.args.as_ref().unwrap_or(&String::new()).clone(),
             in_file: testcase.in_file.as_ref().unwrap_or(&String::new()).clone(),
             exp_file: testcase.exp_file.as_ref().unwrap_or(&String::new()).clone(),
             in_string: testcase

@@ -7,7 +7,7 @@ pub struct Testcase {
     pub subname: Option<String>,
     pub testcase_type: String,
     pub description: Option<String>,
-    pub args: Option<String>,
+    pub args: Option<Vec<String>>,
     pub cflags: Option<String>,
     pub fname: Option<String>,
     // note: if type is mandatory for unit test

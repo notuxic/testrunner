@@ -10,7 +10,7 @@ pub struct UnitTest {
     meta: TestMeta,
     subname: String,
     fname: String,
-    argv: String,
+    argv: Vec<String>,
 }
 
 impl Test for UnitTest {
@@ -48,7 +48,7 @@ impl Test for UnitTest {
             vg_errors: 0,
             vg_warnings: 0,
             vg_logfile: String::from(""),
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv)),
+            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().concat())),
             used_input: String::from(""),
             timeout: false,
             name: self.meta.name.clone(),
@@ -75,7 +75,7 @@ impl Test for UnitTest {
                 protected: testcase.protected.unwrap_or(false),
             },
             fname: testcase.fname.as_ref().unwrap_or(&String::new()).clone(),
-            argv: testcase.args.as_ref().unwrap_or(&String::new()).clone(),
+            argv: testcase.args.as_ref().unwrap_or(&vec![String::new()]).clone(),
             subname: testcase
                 .subname
                 .as_ref()
