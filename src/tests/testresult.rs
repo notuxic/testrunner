@@ -203,8 +203,8 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<Str
                         }
 
                         &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
-                                diffleft.replace("\n", "&nbsp<br>").replace("\0", "\\0"),
-                                diffright.replace("\n", "&nbsp<br>").replace("\0", "\\0") ));
+                                diffleft.replace("\n", "<span class=\"whitespace-hint\">&x21b5;</span><br>").replace("\0", "<span class=\"whitespace-hint\">&x2205;</span><br>"),
+                                diffright.replace("\n", "<span class=\"whitespace-hint\">&x21b5;</span><br>").replace("\0", "<span class=\"whitespace-hint\">&x2205;</span><br>")));
                     }
                 }
             }
