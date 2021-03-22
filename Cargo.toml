@@ -1,6 +1,6 @@
 [package]
 name = "testrunner"
-version = "1.1.3"
+version = "1.2.0"
 authors = ["Thomas Brunner <t.brunner@student.tugraz.at>", "Florian Hager <florian.hager@student.tugraz.at>", "Mathias Kahr <m.kahr@student.tugraz.at>", "Kilian Payer <kilian.payer@student.tugraz.at>"]
 edition = "2018"
 
@@ -17,6 +17,7 @@ colored = "2.0"
 difference = "2.0.0"
 horrorshow = "0.8.1"
 libloading = "0.6"
+maplit = "1.0.2"
 regex = "1.3.6"
 serde = "1.0"
 serde_derive = "1.0"

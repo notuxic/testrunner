@@ -1,7 +1,8 @@
-use difference::{Changeset, Difference};
+use difference::Changeset;
 use horrorshow::Raw;
 use serde_derive::Serialize;
 use serde_json::json;
+use super::diff::changeset_to_html;
 use super::test::TestCaseKind;
 use crate::project::binary::GenerationError;
 
@@ -18,6 +19,8 @@ pub struct TestResult {
     pub diff: Option<Changeset>,
     //#[serde(skip)]
     //diff: Option<Vec<diff::Result<String>>>,
+    #[serde(skip)]
+    pub add_diff: Option<String>,
     pub distance_percentage: Option<f32>,
     pub vg_warnings: i32,
     pub vg_errors: i32,
@@ -120,6 +123,12 @@ impl TestResult {
                         }
                     }
 
+                    @ if self.add_diff.is_some() {
+                        |templ| {
+                            &mut *templ << Raw(self.add_diff.clone().unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
+                        }
+                    }
+
                     |templ| {
                         &mut *templ << Raw(format!(
                                 "{}",
@@ -165,51 +174,5 @@ impl TestResult {
         };
         Ok(String::from(format!("{}", retvar)))
     }
-}
-
-pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<String, HTMLError>
-{
-    let line_end = if compare_mode == "\n" { "\n" } else { "" };
-
-    let retvar = format!(
-        "{}",
-        box_html! {
-            div(id="diff") {
-                table(id="differences") {
-                    |templ| {
-                        let mut diffright = String::new();
-                        let mut diffleft = String::new();
-
-                        for c in &changes.diffs {
-                            match *c {
-                                Difference::Same(ref z)=>
-                                {
-                                    diffright.push_str(&format!("{}{}", z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));//
-                                    diffleft.push_str(&format!("{}{}", z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));//
-                                }
-                                Difference::Rem(ref z) =>
-                                {
-                                    diffleft.push_str(&format!("<span id =\"diff-add\">{}{}</span>",
-                                            z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));//z.replace(" ", "&nbsp").replace("\n", "\\n&nbsp<br>"), line_end));
-                                }
-
-                                Difference::Add(ref z) =>
-                                {
-                                    diffright.push_str(&format!("<span id =\"diff-remove\">{}{}</span>",
-                                            z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));//
-                                }
-
-                            }
-                        }
-
-                        &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
-                                diffleft.replace("\n", "<span class=\"whitespace-hint\">&x21b5;</span><br>").replace("\0", "<span class=\"whitespace-hint\">&x2205;</span><br>"),
-                                diffright.replace("\n", "<span class=\"whitespace-hint\">&x21b5;</span><br>").replace("\0", "<span class=\"whitespace-hint\">&x2205;</span><br>")));
-                    }
-                }
-            }
-    }
-    );
-    Ok(String::from(format!("{}", retvar)))
 }
 

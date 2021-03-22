@@ -207,7 +207,8 @@ impl TestcaseGenerator {
                                 padding: 0.5em;
                                 min-width: 82ch;
                                 max-width: 82ch;
-                                word-wrap: anywhere
+                                word-wrap: anywhere;
+                                word-break: break-all
                             }
                             #differences #compiler {
                                 min-width: 122ch;

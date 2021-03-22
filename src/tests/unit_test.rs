@@ -1,5 +1,5 @@
 use libloading as lib;
-use super::test::{Test, TestCaseKind, TestMeta};
+use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
 use super::testresult::TestResult;
 use super::testcase::Testcase;
 use crate::project::binary::{Binary, GenerationError};
@@ -14,6 +14,8 @@ pub struct UnitTest {
 }
 
 impl Test for UnitTest {
+    fn get_test_meta(&self) -> &TestMeta { &self.meta }
+
     fn run(&self) -> Result<TestResult, GenerationError> {
         if self.meta.projdef.protected_mode && self.meta.protected {
             println!("\nStarting testcase {}: ********", self.meta.number);
@@ -34,12 +36,14 @@ impl Test for UnitTest {
             println!("\nFinished testcase {}: {}", self.meta.number, self.meta.name);
         }
 
+        let add_diff = self.get_add_diff();
 
         Ok(TestResult {
             //diff2 : None,
             distance_percentage: None,
             kind: TestCaseKind::UnitTest,
             diff: None,
+            add_diff,
             implemented: None,
             passed: false,
             result: String::from("Not yet implemented"),
@@ -64,6 +68,17 @@ impl Test for UnitTest {
         projdata: &ProjectDefinition,
         _binary: Option<&Binary>,
     ) -> Result<Self, GenerationError> {
+        let diff_kind = match &testcase.add_diff_mode {
+            Some(text) => {
+                if text.eq_ignore_ascii_case("binary") {
+                    Some(DiffKind::Binary)
+                }
+                else {
+                    Some(DiffKind::PlainText)
+                }
+            },
+            None => None,
+        };
         let retvar = UnitTest {
             meta: TestMeta {
                 number,
@@ -72,6 +87,9 @@ impl Test for UnitTest {
                 timeout: testcase.timeout,
                 projdef: projdata.clone(),
                 kind: TestCaseKind::UnitTest,
+                add_diff_kind: diff_kind,
+                add_in_file: testcase.add_in_file.clone(),
+                add_exp_file: testcase.add_exp_file.clone(),
                 protected: testcase.protected.unwrap_or(false),
             },
             fname: testcase.fname.as_ref().unwrap_or(&String::new()).clone(),
@@ -94,4 +112,3 @@ fn run(test: &UnitTest) -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
-

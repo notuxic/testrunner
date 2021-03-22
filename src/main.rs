@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate horrorshow;
+#[macro_use]
+extern crate maplit;
 
 use std::fs::{read_to_string, write};
 use std::process::Command;

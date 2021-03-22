@@ -6,7 +6,7 @@ use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use wait_timeout::ChildExt;
-use super::test::{Test, TestCaseKind, TestMeta};
+use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
 use super::testresult::TestResult;
 use super::testcase::Testcase;
 use crate::project::binary::{Binary, GenerationError};
@@ -26,6 +26,8 @@ pub struct IoTest {
 }
 
 impl Test for IoTest {
+    fn get_test_meta(&self) -> &TestMeta { &self.meta }
+
     fn run(&self) -> Result<TestResult, GenerationError> {
         if self.meta.projdef.protected_mode && self.meta.protected {
             println!("\nStarting testcase {}: ********", self.meta.number);
@@ -164,7 +166,9 @@ impl Test for IoTest {
 
         let distance = changeset.distance;//get_distance(&stdoutstring, &given_output.0);
         let status = retvar; // TODO refactor
-        let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap() && distance == 0 && !had_timeout; //TODO check if there are not diffs
+        let add_diff = self.get_add_diff();
+        let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap()
+            && distance == 0 && !had_timeout; //TODO check if there are not diffs
 
         if self.meta.projdef.verbose && distance != 0
         {
@@ -212,7 +216,6 @@ impl Test for IoTest {
             colored_stdout.reset().unwrap();
         }
 
-
         let valgrind = parse_vg_log(&vg_filepath).unwrap_or((-1, -1));
         println!("Valgrind warnings: {:?}\nValgrind errors: {:?}", valgrind.0, valgrind.1);
 
@@ -229,6 +232,7 @@ impl Test for IoTest {
         Ok(TestResult {
             diff : Some(changeset),
             //diff: Some(diff),
+            add_diff,
             implemented: None,
             passed,
             result: given_output.clone(),
@@ -266,8 +270,22 @@ impl Test for IoTest {
                 return Err(GenerationError::BinaryRequired);
             }
         };
+        let add_diff_kind = match &testcase.add_diff_mode {
+            Some(text) => {
+                if text.eq_ignore_ascii_case("binary") {
+                    Some(DiffKind::Binary)
+                }
+                else {
+                    Some(DiffKind::PlainText)
+                }
+            },
+            None => None,
+        };
         let meta = TestMeta {
             kind: TestCaseKind::IOTest,
+            add_diff_kind,
+            add_in_file: testcase.add_in_file.clone(),
+            add_exp_file: testcase.add_exp_file.clone(),
             number,
             name: testcase.name.clone(),
             desc: testcase.description.clone(),
@@ -353,4 +371,3 @@ fn command_timeout(cmd: Child, timeout: i32, number: i32) -> (String, Option<i32
 
     return (output, _retvar);
 }
-
