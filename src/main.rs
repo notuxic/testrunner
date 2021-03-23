@@ -32,6 +32,11 @@ fn main() {
             .default_value("l")
             .possible_values(&["l", "w", "c"])
             .help("sets mode of diff-comparison\nl : compare outputs line by line\nw : compare outputs word by word\nc : compare outputs char by char\n"))
+        .arg(Arg::with_name("no-wshints")
+            .short("n")
+            .long("no-ws-hints")
+            .takes_value(false)
+            .help("disables whitespace-hints in diffs of html report"))
         .arg(Arg::with_name("html")
             .short("o")
             .long("html-output")
@@ -75,6 +80,7 @@ fn main() {
     generator.set_verbosity(cli_args.is_present("verbose"));
     generator.set_diff_mode(diff_mode.to_string());
     generator.set_protected_mode(cli_args.occurrences_of("prot-html") > 0);
+    generator.set_whitespace_hinting(cli_args.occurrences_of("no-wshints") == 0);
 
     match generator.generate_generateables() {
         Ok(_) => println!("Done generating"),

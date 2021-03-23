@@ -74,7 +74,7 @@ pub trait Test {
                     }
 
                     let changeset = Changeset::new(&buf_ref, &buf_user, &test_meta.projdef.diff_mode);
-                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode) {
+                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode, test_meta.projdef.ws_hints) {
                         Ok(text) => Some((text, changeset.distance)),
                         Err(_) => None,
                     }

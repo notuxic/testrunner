@@ -57,7 +57,7 @@ impl TestResult {
         }))
     }
 
-    pub fn get_html_long(&self, compare_mode : &str) -> Result<String, GenerationError> {
+    pub fn get_html_long(&self, compare_mode : &str, with_ws_hints: bool) -> Result<String, GenerationError> {
         let retvar = box_html! {
             div(id="long_report") {
                 div(id = "title") {
@@ -120,7 +120,7 @@ impl TestResult {
 
                     @ if self.diff.is_some() {
                         |templ| {
-                            &mut *templ << Raw(changeset_to_html(&self.diff.as_ref().unwrap(), compare_mode).unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
+                            &mut *templ << Raw(changeset_to_html(&self.diff.as_ref().unwrap(), compare_mode, with_ws_hints).unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
                         }
                     }
 
@@ -138,10 +138,16 @@ impl TestResult {
                                         table(id="differences") {
                                             |templ| {
                                                 let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
-                                                &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                        re.replace_all(&self.used_input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
-                                                        .replace("\n", "&#x21b5;<br>")
-                                                        .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                if with_ws_hints {
+                                                    &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                            re.replace_all(&self.used_input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
+                                                            .replace("\n", "&#x21b5;<br />")
+                                                            .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                }
+                                                else {
+                                                    &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                            self.used_input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")));
+                                                }
                                             }
                                         }
                                     }

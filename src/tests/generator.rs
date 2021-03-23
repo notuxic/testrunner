@@ -360,7 +360,7 @@ impl TestcaseGenerator {
                                   |templ| {
                                       for tc in self.test_results.iter() {
                                           if !(protected_mode && tc.protected) {
-                                              &mut *templ << Raw(tc.get_html_long(compare_mode).unwrap_or(String::from("<div>Error</div>")));
+                                              &mut *templ << Raw(tc.get_html_long(compare_mode, self.config.project_definition.ws_hints).unwrap_or(String::from("<div>Error</div>")));
                                           }
                                       }
                                   }
@@ -394,6 +394,10 @@ impl TestcaseGenerator {
 
     pub fn set_protected_mode(&mut self, prot: bool) {
         self.config.project_definition.protected_mode = prot;
+    }
+
+    pub fn set_whitespace_hinting(&mut self, hints: bool) {
+        self.config.project_definition.ws_hints = hints;
     }
 }
 

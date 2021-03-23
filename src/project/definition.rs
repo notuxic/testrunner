@@ -14,5 +14,7 @@ pub struct ProjectDefinition {
     pub diff_mode: String,
     #[serde(skip)]
     pub protected_mode: bool,
+    #[serde(skip)]
+    pub ws_hints: bool,
 }
 
