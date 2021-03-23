@@ -19,7 +19,7 @@ fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) 
                 '.'
             }
         }).collect::<String>();
-        hexdump.push_str(&format!("0x{:0>7X}  &#x2502  {:<47}  &#x2502  {:<16}<br>", offset, hex, ascii).replace(" ", "&nbsp;"));
+        hexdump.push_str(&format!("0x{:0>7X}  &#x250a  {:<47}  &#x250a  {:<16}<br>", offset, hex, ascii).replace(" ", "&nbsp;"));
         *offset += chunk.len();
         *num_lines += 1;
     }
@@ -53,6 +53,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                         let mut diffleft = String::new();
                         let mut linesleft: isize = 0;
                         let mut linesright: isize = 0;
+                        let mut linescarry: isize = 0;
                         let mut offright = 0;
                         let mut offleft = 0;
 
@@ -60,6 +61,16 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                             match *c {
                                 Difference::Same(ref z)=>
                                 {
+                                    linesleft += linescarry;
+                                    linescarry = 0;
+                                    let linesdiff = linesleft - linesright;
+                                    if linesdiff > 0 {
+                                        for _ in 0..linesdiff {
+                                            diffright.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                            linesright += 1;
+                                        }
+                                    }
+
                                     diffright.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offright, &mut linesright)));
                                     diffleft.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
                                 }
@@ -67,26 +78,30 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                                 {
                                     diffleft.push_str(&format!("<span id =\"diff-add\">{}\n</span>",
                                             decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
+                                    linescarry = linesleft - linesright;
+                                    linesleft -= linescarry;
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
                                     diffright.push_str(&format!("<span id =\"diff-remove\">{}\n</span>",
                                             decdata_to_hexdump(z, &mut offright, &mut linesright)));
+                                    linesleft += linescarry;
+                                    linescarry = 0;
                                 }
                             }
 
                             let linesdiff = linesleft - linesright;
                             if linesdiff > 0 {
                                 for _ in 0..linesdiff {
-                                    diffright.push_str(&format!("{}&#x2502{}&#x2502{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                    diffright.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
                                     linesright += 1;
                                 }
                             }
                             else if linesdiff < 0 {
                                 let linesdiff = linesdiff * -1;
                                 for _ in 0..linesdiff {
-                                    diffleft.push_str(&format!("{}&#x2502{}&#x2502{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                    diffleft.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
                                     linesleft += 1;
                                 }
                             }
