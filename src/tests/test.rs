@@ -28,8 +28,8 @@ pub struct TestMeta {
     pub timeout: Option<i32>,
     pub projdef: ProjectDefinition, // use lifetime ref?
     pub kind: TestCaseKind,
-    pub add_diff_kind: Option<DiffKind>,
-    pub add_in_file: Option<String>,
+    pub add_diff_kind: DiffKind,
+    pub add_out_file: Option<String>,
     pub add_exp_file: Option<String>,
     pub protected: bool,
 }
@@ -56,11 +56,11 @@ pub trait Test {
     fn get_test_meta(&self) -> &TestMeta;
     fn get_add_diff(&self) -> Option<(String, i32)> {
         let test_meta = self.get_test_meta();
-        if test_meta.add_diff_kind.is_some() {
-            let mut fd_user = File::open(test_meta.add_in_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_in_file.as_ref().unwrap()));
+        if test_meta.add_out_file.is_some() && test_meta.add_exp_file.is_some() {
+            let mut fd_user = File::open(test_meta.add_out_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_out_file.as_ref().unwrap()));
             let mut fd_ref = File::open(test_meta.add_exp_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_exp_file.as_ref().unwrap()));
 
-            match test_meta.add_diff_kind.as_ref().unwrap() {
+            match test_meta.add_diff_kind {
                 DiffKind::PlainText => {
                     let mut buf_user = String::new();
                     let mut buf_ref = String::new();

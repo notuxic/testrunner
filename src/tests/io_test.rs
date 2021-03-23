@@ -273,18 +273,18 @@ impl Test for IoTest {
         let add_diff_kind = match &testcase.add_diff_mode {
             Some(text) => {
                 if text.eq_ignore_ascii_case("binary") {
-                    Some(DiffKind::Binary)
+                    DiffKind::Binary
                 }
                 else {
-                    Some(DiffKind::PlainText)
+                    DiffKind::PlainText
                 }
             },
-            None => None,
+            None => DiffKind::PlainText,
         };
         let meta = TestMeta {
             kind: TestCaseKind::IOTest,
             add_diff_kind,
-            add_in_file: testcase.add_in_file.clone(),
+            add_out_file: testcase.add_out_file.clone(),
             add_exp_file: testcase.add_exp_file.clone(),
             number,
             name: testcase.name.clone(),

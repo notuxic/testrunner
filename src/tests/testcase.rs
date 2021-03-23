@@ -17,7 +17,7 @@ pub struct Testcase {
     pub exp_string: Option<String>,
     pub exp_retvar: Option<i32>,
     pub add_diff_mode: Option<String>,
-    pub add_in_file: Option<String>,
+    pub add_out_file: Option<String>,
     pub add_exp_file: Option<String>,
     pub timeout: Option<i32>,
     pub env_vars: Option<String>,

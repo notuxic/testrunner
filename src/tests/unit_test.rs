@@ -68,16 +68,16 @@ impl Test for UnitTest {
         projdata: &ProjectDefinition,
         _binary: Option<&Binary>,
     ) -> Result<Self, GenerationError> {
-        let diff_kind = match &testcase.add_diff_mode {
+        let add_diff_kind = match &testcase.add_diff_mode {
             Some(text) => {
                 if text.eq_ignore_ascii_case("binary") {
-                    Some(DiffKind::Binary)
+                    DiffKind::Binary
                 }
                 else {
-                    Some(DiffKind::PlainText)
+                    DiffKind::PlainText
                 }
             },
-            None => None,
+            None => DiffKind::PlainText,
         };
         let retvar = UnitTest {
             meta: TestMeta {
@@ -87,8 +87,8 @@ impl Test for UnitTest {
                 timeout: testcase.timeout,
                 projdef: projdata.clone(),
                 kind: TestCaseKind::UnitTest,
-                add_diff_kind: diff_kind,
-                add_in_file: testcase.add_in_file.clone(),
+                add_diff_kind,
+                add_out_file: testcase.add_out_file.clone(),
                 add_exp_file: testcase.add_exp_file.clone(),
                 protected: testcase.protected.unwrap_or(false),
             },
