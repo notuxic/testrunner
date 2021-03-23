@@ -1,5 +1,6 @@
 use difference::{Changeset, Difference};
 use horrorshow::Raw;
+use regex::Regex;
 use super::testresult::HTMLError;
 
 fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) -> String {
@@ -112,31 +113,34 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode : &str) -> Result<Str
                         let mut diffright = String::new();
                         let mut diffleft = String::new();
 
+                        let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
+
                         for c in &changes.diffs {
                             match *c {
                                 Difference::Same(ref z)=>
                                 {
-                                    diffright.push_str(&format!("{}{}", z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));
-                                    diffleft.push_str(&format!("{}{}", z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));
+                                    diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                &z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                    diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                &z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
                                 }
                                 Difference::Rem(ref z) =>
                                 {
-                                    diffleft.push_str(&format!("<span id =\"diff-add\">{}{}</span>",
-                                            z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));
+                                    diffleft.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                            re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
-                                    diffright.push_str(&format!("<span id =\"diff-remove\">{}{}</span>",
-                                            z.replace(" ", "<span class=\"whitespace-hint\">&middot;</span>").replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>"), line_end));
+                                    diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                            re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
                                 }
-
                             }
                         }
 
                         &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
-                                diffleft.replace("\n", "<span class=\"whitespace-hint\">&#x21b5;</span><br>").replace("\0", "<span class=\"whitespace-hint\">&#x2205;</span><br>"),
-                                diffright.replace("\n", "<span class=\"whitespace-hint\">&#x21b5;</span><br>").replace("\0", "<span class=\"whitespace-hint\">&#x2205;</span><br>")));
+                                diffright.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />"),
+                                diffleft.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />")));
                     }
                 }
             }

@@ -1,5 +1,6 @@
 use difference::Changeset;
 use horrorshow::Raw;
+use regex::Regex;
 use serde_derive::Serialize;
 use serde_json::json;
 use super::diff::changeset_to_html;
@@ -136,10 +137,11 @@ impl TestResult {
                                     div(id="args") {
                                         table(id="differences") {
                                             |templ| {
-                                                &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>", self.used_input
-                                                    .replace(" ", "<span class=\"whitespace-hint\">&middot;</span>")
-                                                    .replace("\n", "<span class=\"whitespace-hint\">&#x21b5;</span><br>")
-                                                    .replace("\t", "<span class=\"whitespace-hint\">&#x21a6;&nbsp;&nbsp;&nbsp;</span>")));
+                                                let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
+                                                &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                        re.replace_all(&self.used_input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
+                                                        .replace("\n", "&#x21b5;<br>")
+                                                        .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
                                             }
                                         }
                                     }
