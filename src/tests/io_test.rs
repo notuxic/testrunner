@@ -342,8 +342,6 @@ impl IoTest {
             }
         }
 
-        println!("cmd.trywait == {:?}", cmd.try_wait());
-
         if cmd.try_wait().ok().is_none() ||  ( cmd.try_wait().ok().unwrap().is_none()) { 
             _retvar = None;
             println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
