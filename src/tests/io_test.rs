@@ -324,8 +324,6 @@ impl IoTest {
 
         let starttime = Instant::now();
         let cmd = cmd_template.stdout_null().start().expect("could not spawn process");
-        println!("running = {:?}; cmd = {:?}", cmd.try_wait(), cmd);
-
 
         while starttime.elapsed().as_millis() < (1000 * (timeout as u128) )  {
             match cmd.try_wait() {
