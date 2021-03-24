@@ -104,168 +104,168 @@ impl TestcaseGenerator {
                 //CSS
                 style{
                     : Raw(
-                        r"
+                        format!(r#"
                             @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300&display=swap');
                             @import url('https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css');
-                            body {
+                            body {{
                                 font-family: 'Roboto', sans-serif;
                                 font-weight: 300;
                                 color: #222;
                                 max-width: 100em;
                                 margin-left: auto;
                                 margin-right: auto
-                            }
-                            body > h1 {
+                            }}
+                            body > h1 {{
                                 text-align: center;
                                 font-size: 3em
-                            }
-                            body > h2 {
+                            }}
+                            body > h2 {{
                                 font-size: 1.8em;
                                 border-bottom: 0.1em solid #666;
                                 margin-top: 4em
-                            }
-                            table {
+                            }}
+                            table {{
                                 border-collapse: collapse
-                            }
-                            tr:hover {
+                            }}
+                            tr:hover {{
                                 background: #eee
-                            }
-                            th {
+                            }}
+                            th {{
                                 text-align: right
-                            }
-                            th, td {
+                            }}
+                            th, td {{
                                 padding-left: 1em;
                                 padding-right: 1em
-                            }
-                            a {
+                            }}
+                            a {{
                                 text-decoration: none;
-                            }
-                            #shortreport {
+                            }}
+                            #shortreport {{
                                 margin-top: 3em;
                                 margin-left: auto;
                                 margin-right: auto
-                            }
-                            #shortreport th, #shortreport td {
+                            }}
+                            #shortreport th, #shortreport td {{
                                 text-align: center
-                            }
-                            #shortreport td:first-child {
+                            }}
+                            #shortreport td:first-child {{
                                 text-align: left;
-                            }
-                            #shortreport tr:first-child th {
+                            }}
+                            #shortreport tr:first-child th {{
                                 border-bottom: 0.1em solid #222
-                            }
-                            #shortreport tr:hover:first-of-type {
+                            }}
+                            #shortreport tr:hover:first-of-type {{
                                 background: initial
-                            }
-                            #long_report {
+                            }}
+                            #long_report {{
                                 margin-top: 5em
-                            }
-                            #long_report > div {
+                            }}
+                            #long_report > div {{
                                 margin-left: 5em;
                                 margin-right: 5em
-                            }
-                            #long_report > div#description {
+                            }}
+                            #long_report > div#description {{
                                 margin-left: 10em;
                                 margin-right: 10em
-                            }
-                            #title > h2 {
+                            }}
+                            #title > h2 {{
                                 display: flex;
                                 border-bottom: 0.1em dashed #444
-                            }
-                            #shortinfo {
+                            }}
+                            #shortinfo {{
                                 margin-left: auto;
                                 margin-right: auto;
                                 margin-top: 2em
-                            }
-                            div#shortinfo table {
+                            }}
+                            div#shortinfo table {{
                                 margin-left: auto;
                                 margin-right: auto
-                            }
-                            #shortinfo > table th:first-of-type {
+                            }}
+                            #shortinfo > table th:first-of-type {{
                                 border-right: 0.1em solid #222
-                            }
-                            table td, table td * {
+                            }}
+                            table td, table td * {{
                                 vertical-align: top;
                                 horizontal-align: top
-                            }
-                            #differences {
+                            }}
+                            #differences {{
                                 background: #eee;
                                 margin-top: 3em;
                                 padding-left: 3em;
                                 width: initial
-                            }
-                            #differences tr:first-of-type {
+                            }}
+                            #differences tr:first-of-type {{
                                 border-bottom: 0.1em solid #222
-                            }
-                            #differences th {
+                            }}
+                            #differences th {{
                                 text-align: center;
                                 padding: 0.5em
-                            }
-                            #differences td {
+                            }}
+                            #differences td {{
                                 font-family: 'Hack', monospace;
                                 font-size: 0.82em;
                                 padding: 0.5em;
-                                min-width: 82ch;
-                                max-width: 82ch;
+                                min-width: {}ch;
+                                max-width: {}ch;
                                 word-wrap: anywhere;
                                 word-break: break-all
-                            }
-                            #differences #compiler {
+                            }}
+                            #differences #compiler {{
                                 min-width: 122ch;
                                 max-width: 122ch;
-                            }
-                            #differences td:nth-child(2), #differences th:nth-child(2) {
+                            }}
+                            #differences td:nth-child(2), #differences th:nth-child(2) {{
                                 border-left: 0.1em dashed #222
-                            }
-                            #diff-add {
+                            }}
+                            #diff-add {{
                                 background-color: yellowgreen
-                            }
-                            #diff-remove {
+                            }}
+                            #diff-remove {{
                                 background-color: IndianRed
-                            }
-                            .inline-code {
+                            }}
+                            .inline-code {{
                                 background: #eee;
                                 font-family: 'Hack', monospace;
                                 font-size: 0.84em;
                                 font-weight: 300;
                                 vertical-align: baseline;
-                            }
-                            .link-summary {
+                            }}
+                            .link-summary {{
                                 display: inline-block;
                                 font-size: 0.8em;
                                 font-weight: normal;
                                 vertical-align: baseline;
                                 margin-left: auto;
-                            }
-                            .whitespace-hint {
+                            }}
+                            .whitespace-hint {{
                                 color: #bbb
-                            }
-                            #diff-add .whitespace-hint {
+                            }}
+                            #diff-add .whitespace-hint {{
                                 color: green
-                            }
-                            #diff-remove .whitespace-hint {
+                            }}
+                            #diff-remove .whitespace-hint {{
                                 color: darkred
-                            }
-                            #failed {
+                            }}
+                            #failed {{
                                 width: 61em;
                                 margin-top: 5em;
                                 margin-left: auto;
                                 margin-right: auto
-                            }
-                            .warning {
+                            }}
+                            .warning {{
                                 font-size: large;
                                 background-color: #ff000033;
                                 color: darkred;
                                 padding: 0.5em;
                                 border-left: darkred 0.4em solid
-                            }
-                            #flex-container {
+                            }}
+                            #flex-container {{
                                 display: flex;
                                 flex-direction: row;
                                 justify-content: center;
                                 align-items: center
-                            }
-                        ")
+                            }}
+                        "#, self.config.project_definition.table_width.unwrap_or(82), self.config.project_definition.table_width.unwrap_or(82)))
                 }
                 body{
                     h1 : "Testreport";

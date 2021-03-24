@@ -1,11 +1,9 @@
 use std::fs::{create_dir_all, read_to_string};
 use std::io::{Read, Write};
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::{ Instant};
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use wait_timeout::ChildExt;
 use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
 use super::testresult::TestResult;
 use super::testcase::Testcase;
@@ -36,51 +34,6 @@ impl Test for IoTest {
             println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
         }
 
-        let mut stdinstring: String = String::new();
-        if !self.in_file.is_empty() {
-            match read_to_string(&self.in_file) {
-                Ok(content) => {
-                    stdinstring.clone_from(&content);
-                }
-                Err(err) => {
-                    println!("Cannot open stdinfile, fallback to none \n{:?}", err);
-                }
-            }
-        } else if !self.in_string.is_empty() {
-            stdinstring.clone_from(&self.in_string);
-        }
-        let envs: Vec<(String, String)> = match &self.env_vars {
-            Some(var_string) => {
-                let mut splits: Vec<(String, String)> = Vec::new();
-                for split in var_string.split(",") {
-                    if split.contains("=") {
-                        let mut m = split.splitn(2, "=");
-                        splits.push((
-                                m.next().unwrap().clone().to_string(),
-                                m.next().unwrap().clone().to_string(),
-                        ));
-                    } else {
-                        splits.push((String::from(split), String::new()));
-                    }
-                }
-                splits
-            }
-            None => Vec::new(),
-        };
-        // same for expected stdout
-        let mut stdoutstring: String = String::new();
-        if !self.exp_file.is_empty() {
-            match read_to_string(&self.exp_file) {
-                Ok(content) => {
-                    stdoutstring = content;
-                }
-                Err(err) => {
-                    println!("Cannot open stdout, fallback to none \n{:?}", err);
-                }
-            }
-        } else if !self.exp_string.is_empty() {
-            stdoutstring = self.exp_string.clone();
-        }
 
         create_dir_all(format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number)).expect("could not create valgrind_log folder");
         let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number);
@@ -94,58 +47,15 @@ impl Test for IoTest {
         vg_flags.push(format!("./{}", &self.meta.projdef.project_name));
         vg_flags.append(&mut self.argv.clone() ); //.push(self.argv.clone());
 
-        // // run assignment file compiled with fsanitize
-        // let mut run_cmd = Command::new(format!("./{}", &self.meta.projdata.project_name))
-        //     //assuming makefile_path = project path
-        //     .current_dir(
-        //         &self
-        //             .meta
-        //             .projdata
-        //             .makefile_path
-        //             .as_ref()
-        //             .unwrap_or(&String::from("./")),
-        //     )
-        //     .args([
-        //         &self.argv,
-        //     ].iter().filter(|s| !s.is_empty()))
-        //     .stdin(Stdio::piped())
-        //     .stdout(Stdio::piped())
-        //     .stderr(Stdio::piped())
-        //     .envs(envs)
-        //     .spawn()
-        //     .expect("could not spawn process");
-
         let starttime = Instant::now();
 
-        let mut run_cmd = Command::new("valgrind")
-            // run valgrind with the given program name
-            //assuming makefile_path = project path
-            .current_dir(
-                &self
-                .meta
-                .projdef
-                .makefile_path
-                .as_ref()
-                .unwrap_or(&String::from("./")))
-            .args(vg_flags.iter().filter(|s| !s.is_empty()))
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .envs(envs)
-            .spawn()
-            .expect("could not spawn process");
-
-        if !stdinstring.is_empty() {
-            let stdin = run_cmd.stdin.as_mut().expect("failed to get stdin");
-            stdin
-                .write_all(&stdinstring.clone().into_bytes())
-                .expect("could not send input");
-        }
 
         let global_timeout = self.meta.projdef.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
+        // let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
+        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout("valgrind", &vg_flags, timeout);
+
         println!("Got output from testcase {}", self.meta.number);
 
         let mut had_timeout = true;
@@ -153,8 +63,8 @@ impl Test for IoTest {
             had_timeout = false;
         }
         else {
-            if given_output.len() > stdoutstring.len() * 4 {
-                let output_length = std::cmp::min( stdoutstring.len()  * 4 ,  given_output.len() );
+            if given_output.len() > reference_output.len() * 2 {
+                let output_length = std::cmp::min( reference_output.len()  * 2 ,  given_output.len() );
                 given_output = given_output.chars().take(output_length).collect();
                 println!("Reducing output length because of endless loop!");
             }
@@ -162,9 +72,9 @@ impl Test for IoTest {
         }
 
         // make changeset
-        let changeset = Changeset::new(&stdoutstring, &given_output, &self.meta.projdef.diff_mode);
+        let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_mode);
 
-        let distance = changeset.distance;//get_distance(&stdoutstring, &given_output.0);
+        let distance = changeset.distance;//get_distance(&reference_output, &given_output.0);
         let status = retvar; // TODO refactor
         let add_diff = self.get_add_diff();
         let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap()
@@ -174,7 +84,7 @@ impl Test for IoTest {
         {
             println!("Diff-Distance: {:?}", distance);
             println!("------ START Reference ------");
-            println!("Reference Output:\n{:?}", stdoutstring);
+            println!("Reference Output:\n{:?}", reference_output);
             println!("------ END Reference ------");
             println!("------ START Yours ------");
             println!("Your Output:\n{:?}", given_output);
@@ -242,7 +152,7 @@ impl Test for IoTest {
             vg_errors: valgrind.1,
             vg_logfile: vg_filepath,
             command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().join(" "))),
-            used_input: stdinstring,
+            used_input: input,
             timeout: had_timeout,
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
@@ -250,7 +160,7 @@ impl Test for IoTest {
             kind: self.meta.kind,
             distance_percentage: Some(percentage_from_levenstein(
                     distance,
-                    &stdoutstring,
+                    &reference_output,
                     &given_output,
             )),
             protected: self.meta.protected,
@@ -348,26 +258,104 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
     }
 }
 
-fn command_timeout(cmd: Child, timeout: i32, number: i32) -> (String, Option<i32>) {
-    let mut cmd = cmd;
+impl IoTest {
+    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
 
-    let mut output = String::new();
-    let mut _retvar = Some(-99);
-    let mut tmp : Vec<u8> =  Vec::new();
-
-    match cmd.wait_timeout(Duration::from_secs(timeout as u64)).unwrap() {
-        Some(expr) => {
-            _retvar = Some(expr.code().unwrap_or(-99));
+        let mut input: String = String::new();
+        if !self.in_file.is_empty() {
+            match read_to_string(&self.in_file) {
+                Ok(content) => {
+                    input.clone_from(&content);
+                }
+                Err(err) => {
+                    println!("Cannot open stdinfile, fallback to none \n{:?}", err);
+                }
+            }
+        } else if !self.in_string.is_empty() {
+            input.clone_from(&self.in_string);
         }
-        None => {
+
+        let mut reference_output: String = String::new();
+        if !self.exp_file.is_empty() {
+            match read_to_string(&self.exp_file) {
+                Ok(content) => {
+                    reference_output = content;
+                }
+                Err(err) => {
+                    println!("Cannot open stdout, fallback to none \n{:?}", err);
+                }
+            }
+        } else if !self.exp_string.is_empty() {
+            reference_output = self.exp_string.clone();
+        }
+
+
+        let envs: Vec<(String, String)> = match &self.env_vars {
+            Some(var_string) => {
+                let mut splits: Vec<(String, String)> = Vec::new();
+                for split in var_string.split(",") {
+                    if split.contains("=") {
+                        let mut m = split.splitn(2, "=");
+                        splits.push((
+                                m.next().unwrap().clone().to_string(),
+                                m.next().unwrap().clone().to_string(),
+                        ));
+                    } else {
+                        splits.push((String::from(split), String::new()));
+                    }
+                }
+                splits
+            }
+            None => Vec::new(),
+        };
+
+        let cmd_template =  duct::cmd(command , args.iter().filter(|s| !s.is_empty()))
+                            .dir(&self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
+                            .stdin_bytes(input.clone())
+                            .full_env(envs)
+                            .unchecked();
+
+        let stdout_reader = cmd_template.reader().expect("Could not open stdoutpipe");
+        let mut readbuffer = std::io::BufReader::with_capacity(reference_output.len() + 200, stdout_reader);
+
+        let mut _retvar = Some(-99);
+        
+        let mut tmp : Vec<u8> = Vec::with_capacity(reference_output.len());
+
+        let starttime = Instant::now();
+        let cmd = cmd_template.stdout_null().start().expect("could not spawn process");
+        println!("running = {:?}; cmd = {:?}", cmd.try_wait(), cmd);
+
+
+        while starttime.elapsed().as_millis() < (1000 * (timeout as u128) )  {
+            match cmd.try_wait() {
+                Ok(Some(expr)) => {
+                    _retvar = Some(expr.status.code().unwrap_or(-99));
+                    break;
+                }
+                Ok(None) => {
+                    std::thread::sleep(std::time::Duration::from_millis(10 as u64));
+                }
+                Err(err) => {
+                    println!("Error!\n {:?}", err);
+                }
+            }
+        }
+
+        println!("cmd.trywait == {:?}", cmd.try_wait());
+
+        if cmd.try_wait().ok().is_none() ||  ( cmd.try_wait().ok().unwrap().is_none()) { 
             _retvar = None;
-            println!("Killing testcase {} because of timeout", number);
-            cmd.kill().expect("Upps, can't kill this one");
+            println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
+            cmd.kill().expect("Upps, can't kill this one"); 
         }
+        
+        readbuffer.read_to_end(&mut tmp).expect("Could not read stdout"); 
+        let output = String::from_utf8_lossy(&tmp).to_string();
+
+        return (input, reference_output, output, _retvar);
+
     }
-
-    cmd.stdout.as_mut().unwrap().read_to_end(&mut tmp).expect("could not read stdout");
-    output = format!("{}{}", output, String::from_utf8_lossy(&tmp));
-
-    return (output, _retvar);
+        
 }
+

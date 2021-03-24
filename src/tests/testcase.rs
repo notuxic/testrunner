@@ -19,7 +19,7 @@ pub struct Testcase {
     pub add_diff_mode: Option<String>,
     pub add_out_file: Option<String>,
     pub add_exp_file: Option<String>,
-    pub timeout: Option<i32>,
+    pub timeout: Option<u64>,
     pub env_vars: Option<String>,
     pub protected: Option<bool>,
 }

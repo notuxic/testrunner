@@ -25,7 +25,7 @@ pub struct TestMeta {
     pub number: i32,
     pub name: String,
     pub desc: Option<String>,
-    pub timeout: Option<i32>,
+    pub timeout: Option<u64>,
     pub projdef: ProjectDefinition, // use lifetime ref?
     pub kind: TestCaseKind,
     pub add_diff_kind: DiffKind,

@@ -6,7 +6,7 @@ pub struct ProjectDefinition {
     pub makefile_path: Option<String>,
     pub maketarget: Option<String>,
     pub lib_path: Option<String>,
-    pub global_timeout : Option<i32>,
+    pub global_timeout : Option<u64>,
     pub valgrind_flags : Option<Vec<String>>,
     #[serde(skip)]
     pub verbose: bool,
@@ -16,5 +16,6 @@ pub struct ProjectDefinition {
     pub protected_mode: bool,
     #[serde(skip)]
     pub ws_hints: bool,
+    pub table_width: Option<u64>,
 }
 
