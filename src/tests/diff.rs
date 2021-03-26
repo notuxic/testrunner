@@ -148,7 +148,7 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
                                 Difference::Rem(ref z) =>
                                 {
                                     if with_ws_hints {
-                                        diffleft.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                        diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                 re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
                                     }
                                     else {
