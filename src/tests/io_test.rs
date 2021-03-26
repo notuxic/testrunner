@@ -4,7 +4,6 @@ use std::time::{ Instant};
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use vfs::FileSystem;
 use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
 use super::testresult::TestResult;
 use super::testcase::Testcase;

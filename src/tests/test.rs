@@ -56,46 +56,53 @@ pub trait Test {
     fn get_test_meta(&self) -> &TestMeta;
     fn get_add_diff(&self) -> Option<(String, i32)> {
         let test_meta = self.get_test_meta();
+
         if test_meta.add_out_file.is_some() && test_meta.add_exp_file.is_some() {
-            let mut fd_user = File::open(test_meta.add_out_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_out_file.as_ref().unwrap()));
+
+            let fd_user = File::open(test_meta.add_out_file.as_ref().unwrap());//.expect(&format!("Cannot open file `{}`", test_meta.add_out_file.as_ref().unwrap()));
             let mut fd_ref = File::open(test_meta.add_exp_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_exp_file.as_ref().unwrap()));
+
+            let mut buf_user = Vec::<u8>::new();
+            let mut buf_ref = Vec::<u8>::new();
+
+            match fd_user {
+                Ok(_) => {
+                    match fd_user.unwrap().read_to_end(&mut buf_user) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            println!("Could not read file {}.\n{}",test_meta.add_out_file.as_ref().unwrap(), e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    println!("Could not open File {}\n{}", test_meta.add_out_file.as_ref().unwrap(), e);
+                }
+            }
+
+            match fd_ref.read_to_end(&mut buf_ref) {
+                Ok(_) => (),
+                Err(e) => panic!(e),
+            }
+
 
             match test_meta.add_diff_kind {
                 DiffKind::PlainText => {
-                    let mut buf_user = String::new();
-                    let mut buf_ref = String::new();
-                    match fd_user.read_to_string(&mut buf_user) {
-                        Ok(_) => (),
-                        Err(e) => panic!(e),
-                    }
-                    match fd_ref.read_to_string(&mut buf_ref) {
-                        Ok(_) => (),
-                        Err(e) => panic!(e),
-                    }
+                    let orig = format!("{}", String::from_utf8_lossy(&buf_ref));
+                    let edit = format!("{}", String::from_utf8_lossy(&buf_user));
 
-                    let changeset = Changeset::new(&buf_ref, &buf_user, &test_meta.projdef.diff_mode);
+                    let changeset = Changeset::new(&orig, &edit, &test_meta.projdef.diff_mode);
                     return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode, test_meta.projdef.ws_hints) {
                         Ok(text) => Some((text, changeset.distance)),
                         Err(_) => None,
-                    }
-                },
+                    }                    
+                }
                 DiffKind::Binary => {
-                    let mut buf_user = Vec::<u8>::new();
-                    let mut buf_ref = Vec::<u8>::new();
-                    match fd_user.read_to_end(&mut buf_user) {
-                        Ok(_) => (),
-                        Err(e) => panic!(e),
-                    }
-                    match fd_ref.read_to_end(&mut buf_ref) {
-                        Ok(_) => (),
-                        Err(e) => panic!(e),
-                    }
-
                     return match diff_binary_to_html(&buf_ref, &buf_user) {
                         Ok(text) => Some(text),
                         Err(_) => None,
-                    }
-                },
+                    }                    
+                }
+ 
             }
         };
         None
