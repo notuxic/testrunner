@@ -1,4 +1,4 @@
-use std::fs::{create_dir_all, read_to_string};
+use std::{convert::TryInto, fs::{create_dir_all, read_to_string}};
 use std::io::{Read, Write};
 use std::time::{ Instant};
 use difference::{Changeset, Difference};
@@ -55,6 +55,7 @@ impl Test for IoTest {
 
         // let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
         let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout("valgrind", &vg_flags, timeout);
+        println!("returned from run_command_with_timeout");
 
         println!("Got output from testcase {}", self.meta.number);
 
@@ -259,6 +260,7 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
 }
 
 impl IoTest {
+
     fn run_command_with_timeout(&self, command : &str, args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
 
         let mut input: String = String::new();
@@ -309,47 +311,57 @@ impl IoTest {
             None => Vec::new(),
         };
 
-        let cmd_template =  duct::cmd(command , args.iter().filter(|s| !s.is_empty()))
-                            .dir(&self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
-                            .stdin_bytes(input.clone())
-                            .full_env(envs)
-                            .unchecked();
 
-        let stdout_reader = cmd_template.reader().expect("Could not open stdoutpipe");
-        let mut readbuffer = std::io::BufReader::with_capacity(reference_output.len() + 200, stdout_reader);
-
-        let mut _retvar = Some(-99);
-        
-        let mut tmp : Vec<u8> = Vec::with_capacity(reference_output.len());
-
-        let starttime = Instant::now();
-        let cmd = cmd_template.stdout_null().start().expect("could not spawn process");
-
-        while starttime.elapsed().as_millis() < (1000 * (timeout as u128) )  {
-            match cmd.try_wait() {
-                Ok(Some(expr)) => {
-                    _retvar = Some(expr.status.code().unwrap_or(-99));
-                    break;
-                }
-                Ok(None) => {
-                    std::thread::sleep(std::time::Duration::from_millis(10 as u64));
-                }
-                Err(err) => {
-                    println!("Error!\n {:?}", err);
-                }
+        let mut command_with_args = String::from(format!("{:?}", command));
+        for elem in args.iter() {
+            if !elem.is_empty() {
+                command_with_args.push_str(&format!(" {:?} ", elem));
             }
         }
 
-        if cmd.try_wait().ok().is_none() ||  ( cmd.try_wait().ok().unwrap().is_none()) { 
-            _retvar = None;
-            println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
-            cmd.kill().expect("Upps, can't kill this one"); 
-        }
-        
-        readbuffer.read_to_end(&mut tmp).expect("Could not read stdout"); 
-        let output = String::from_utf8_lossy(&tmp).to_string();
 
-        return (input, reference_output, output, _retvar);
+        let mut _retvar = Some(-99);
+        let mut _output = String::new();
+
+        let mut cmd = subprocess::Exec::shell(command_with_args )
+                        .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
+                        .stdin(subprocess::Redirection::Pipe)
+                        .stdout(subprocess::Redirection::Pipe)
+                        .env_extend(&envs)
+                        .popen()
+                        .expect("Could not spawn process");
+
+
+        let capture = cmd.communicate_start(Some( input.as_bytes().iter().cloned().collect() ) )
+                                        .limit_time(std::time::Duration::new(timeout , 0))
+                                        .limit_size(reference_output.len() + 200).read();
+
+        if cmd.poll().is_none() {
+            println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
+            cmd.kill().expect("Upps, can't kill this one");         
+            cmd.wait().expect("failed waiting for kill");  
+        }
+
+        match capture {
+            Ok(c) => {
+                _output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())) );
+            }
+            Err(e) => {
+                _output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())) );
+            }
+        }
+
+        match cmd.exit_status().unwrap_or(subprocess::ExitStatus::Undetermined) {
+            subprocess::ExitStatus::Exited(code) => {
+                _retvar = Some(code as i32);
+            }
+            _ => {
+                _retvar = None;
+            }
+        }
+
+
+        return (input, reference_output, _output, _retvar);
 
     }
         
