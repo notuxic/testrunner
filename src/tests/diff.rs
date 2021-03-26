@@ -40,7 +40,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
     }
     giv_str.pop();
 
-    let changeset = Changeset::new(&ref_str, &giv_str, " ");
+    let changeset = Changeset::new(&giv_str ,&ref_str, " ");
     let distance = changeset.distance;
 
     let retvar = format!(
@@ -76,18 +76,18 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                                 }
                                 Difference::Rem(ref z) =>
                                 {
-                                    diffleft.push_str(&format!("<span id =\"diff-add\">{}\n</span>",
-                                            decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
-                                    linescarry = linesleft - linesright;
-                                    linesleft -= linescarry;
-                                }
-
-                                Difference::Add(ref z) =>
-                                {
                                     diffright.push_str(&format!("<span id =\"diff-remove\">{}\n</span>",
                                             decdata_to_hexdump(z, &mut offright, &mut linesright)));
                                     linesleft += linescarry;
                                     linescarry = 0;
+                                }
+
+                                Difference::Add(ref z) =>
+                                {
+                                    diffleft.push_str(&format!("<span id =\"diff-add\">{}\n</span>",
+                                            decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
+                                    linescarry = linesleft - linesright;
+                                    linesleft -= linescarry;
                                 }
                             }
 
@@ -148,22 +148,22 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
                                 Difference::Rem(ref z) =>
                                 {
                                     if with_ws_hints {
-                                        diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                        diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                 re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
                                     }
                                     else {
-                                        diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
                                     }
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
                                     if with_ws_hints {
-                                        diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                        diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                 re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
                                     }
                                     else {
-                                        diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
                                     }
                                 }
                             }
