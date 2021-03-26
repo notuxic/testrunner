@@ -91,10 +91,8 @@ impl Binary {
                         *entry += 1;
                     }
                     if !warnings.is_empty() {
-                        // each entry was detected twice, thus half the amount now
                         println!("Detected compiler warnings:");
                         for (warn, amount) in warnings.iter_mut() {
-                            *amount /= 2;
                             println!("  {}: {}", warn, *amount);
                         }
                         self.info.warnings = Some(warnings);
