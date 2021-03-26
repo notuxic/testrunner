@@ -63,14 +63,14 @@ impl Test for IoTest {
         if retvar.is_some() {
             had_timeout = false;
         }
-        else {
-            if given_output.len() > reference_output.len() * 2 {
-                let output_length = std::cmp::min( reference_output.len()  * 2 ,  given_output.len() );
-                given_output = given_output.chars().take(output_length).collect();
-                println!("Reducing output length because of endless loop!");
-            }
-
+        
+        if given_output.len() >= reference_output.len() * 2 {
+            let output_length = std::cmp::min( reference_output.len()  * 2 ,  given_output.len() );
+            given_output = given_output.chars().take(output_length).collect();
+            println!("Reducing your output length because its bigger than 2 * reference output");
         }
+
+        
 
         // make changeset
         let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_mode);
@@ -260,7 +260,6 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
 }
 
 impl IoTest {
-
     fn run_command_with_timeout(&self, command : &str, args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
 
         let mut input: String = String::new();
@@ -319,27 +318,29 @@ impl IoTest {
             }
         }
 
+        let mut cmd = subprocess::Exec::shell(command_with_args )
+                    //.args(args)
+                    .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
+                    //.stdin(input.as_ref())
+                    .stdin(subprocess::Redirection::Pipe)
+                    .stdout(subprocess::Redirection::Pipe)
+                    .env_extend(&envs)
+                    .popen()
+                    .expect("Could not spawn process");
 
+    
         let mut _retvar = Some(-99);
         let mut _output = String::new();
 
-        let mut cmd = subprocess::Exec::shell(command_with_args )
-                        .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
-                        .stdin(subprocess::Redirection::Pipe)
-                        .stdout(subprocess::Redirection::Pipe)
-                        .env_extend(&envs)
-                        .popen()
-                        .expect("Could not spawn process");
-
-
         let capture = cmd.communicate_start(Some( input.as_bytes().iter().cloned().collect() ) )
                                         .limit_time(std::time::Duration::new(timeout , 0))
-                                        .limit_size(reference_output.len() + 200).read();
-
-        if cmd.poll().is_none() {
+                                        .read();
+        
+        if cmd.poll().is_none() && cmd.exit_status().is_none() {
             println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
             cmd.kill().expect("Upps, can't kill this one");         
-            cmd.wait().expect("failed waiting for kill");  
+            cmd.wait().expect("failed wating for kill");  
+            _retvar = None;
         }
 
         match capture {
@@ -356,7 +357,6 @@ impl IoTest {
                 _retvar = Some(code as i32);
             }
             _ => {
-                _retvar = None;
             }
         }
 
