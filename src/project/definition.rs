@@ -17,5 +17,6 @@ pub struct ProjectDefinition {
     #[serde(skip)]
     pub ws_hints: bool,
     pub table_width: Option<u64>,
+    pub use_valgrind: Option<bool>,
 }
 

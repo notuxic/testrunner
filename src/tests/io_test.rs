@@ -4,6 +4,7 @@ use std::time::{ Instant};
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use vfs::FileSystem;
 use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
 use super::testresult::TestResult;
 use super::testcase::Testcase;
@@ -45,7 +46,7 @@ impl Test for IoTest {
 
         vg_flags.push(format!("--log-file={}", &vg_filepath ));
         vg_flags.push(format!("./{}", &self.meta.projdef.project_name));
-        vg_flags.append(&mut self.argv.clone() ); //.push(self.argv.clone());
+        // vg_flags.append(&mut self.argv.clone() ); //.push(self.argv.clone());
 
         let starttime = Instant::now();
 
@@ -54,7 +55,12 @@ impl Test for IoTest {
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
         // let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
-        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout("valgrind", &vg_flags, timeout);
+        let mut cmd_name = String::from("valgrind");
+        if ! self.meta.projdef.use_valgrind.unwrap_or(true) {
+            cmd_name = format!("./{}", self.meta.projdef.project_name);
+            vg_flags.clear();
+        }
+        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &vg_flags, timeout);
         println!("returned from run_command_with_timeout");
 
         println!("Got output from testcase {}", self.meta.number);
@@ -260,7 +266,7 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
 }
 
 impl IoTest {
-    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
+    fn run_command_with_timeout(&self, command : &str, vg_args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
 
         let mut input: String = String::new();
         if !self.in_file.is_empty() {
@@ -312,11 +318,17 @@ impl IoTest {
 
 
         let mut command_with_args = String::from(format!("{:?}", command));
-        for elem in args.iter() {
+        for elem in vg_args.iter() {
             if !elem.is_empty() {
                 command_with_args.push_str(&format!(" {:?} ", elem));
             }
         }
+        for elem in self.argv.iter() {
+            if !elem.is_empty() {
+                command_with_args.push_str(&format!(" {:?} ", elem));
+            }
+        }
+
 
         let mut cmd = subprocess::Exec::shell(command_with_args )
                     //.args(args)
@@ -345,9 +357,11 @@ impl IoTest {
 
         match capture {
             Ok(c) => {
+                println!("c={:?}", c);
                 _output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())) );
             }
             Err(e) => {
+                println!("e={:?}", e);
                 _output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())) );
             }
         }
@@ -356,9 +370,15 @@ impl IoTest {
             subprocess::ExitStatus::Exited(code) => {
                 _retvar = Some(code as i32);
             }
+            subprocess::ExitStatus::Other(code) => {
+                _retvar = Some(code);
+            }
             _ => {
+
             }
         }
+
+        println!("cmd = {:?} \n", cmd);
 
 
         return (input, reference_output, _output, _retvar);
