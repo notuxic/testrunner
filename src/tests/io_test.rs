@@ -60,7 +60,6 @@ impl Test for IoTest {
             vg_flags.clear();
         }
         let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &vg_flags, timeout);
-        println!("returned from run_command_with_timeout");
 
         println!("Got output from testcase {}", self.meta.number);
 
@@ -356,11 +355,10 @@ impl IoTest {
 
         match capture {
             Ok(c) => {
-                println!("c={:?}", c);
                 _output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())) );
             }
             Err(e) => {
-                println!("e={:?}", e);
+                println!("error={:?}", e);
                 _output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())) );
             }
         }
@@ -376,8 +374,6 @@ impl IoTest {
 
             }
         }
-
-        println!("cmd = {:?} \n", cmd);
 
 
         return (input, reference_output, _output, _retvar);
