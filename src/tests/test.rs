@@ -81,7 +81,7 @@ pub trait Test {
 
             match fd_ref.read_to_end(&mut buf_ref) {
                 Ok(_) => (),
-                Err(e) => panic!(e),
+                Err(e) => panic!("{}", e),
             }
 
 

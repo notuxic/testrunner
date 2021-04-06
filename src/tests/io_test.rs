@@ -1,5 +1,5 @@
-use std::{convert::TryInto, fs::{create_dir_all, read_to_string}};
-use std::io::{Read, Write};
+use std::fs::{create_dir_all, read_to_string};
+use std::io::Write;
 use std::time::{ Instant};
 use difference::{Changeset, Difference};
 use regex::Regex;
@@ -67,14 +67,14 @@ impl Test for IoTest {
         if retvar.is_some() {
             had_timeout = false;
         }
-        
+
         if given_output.len() >= reference_output.len() * 2 {
             let output_length = std::cmp::min( reference_output.len()  * 2 ,  given_output.len() );
             given_output = given_output.chars().take(output_length).collect();
             println!("Reducing your output length because its bigger than 2 * reference output");
         }
 
-        
+
 
         // make changeset
         let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_mode);
@@ -334,22 +334,23 @@ impl IoTest {
                     //.stdin(input.as_ref())
                     .stdin(subprocess::Redirection::Pipe)
                     .stdout(subprocess::Redirection::Pipe)
+                    .stderr(subprocess::NullFile)
                     .env_extend(&envs)
                     .popen()
                     .expect("Could not spawn process");
 
-    
+
         let mut _retvar = Some(-99);
         let mut _output = String::new();
 
         let capture = cmd.communicate_start(Some( input.as_bytes().iter().cloned().collect() ) )
                                         .limit_time(std::time::Duration::new(timeout , 0))
                                         .read();
-        
+
         if cmd.poll().is_none() && cmd.exit_status().is_none() {
             println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
-            cmd.kill().expect("Upps, can't kill this one");         
-            cmd.wait().expect("failed wating for kill");  
+            cmd.kill().expect("Upps, can't kill this one");
+            cmd.wait().expect("failed wating for kill");
             _retvar = None;
         }
 
@@ -375,10 +376,7 @@ impl IoTest {
             }
         }
 
-
         return (input, reference_output, _output, _retvar);
-
     }
-        
 }
 
