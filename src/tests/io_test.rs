@@ -55,7 +55,10 @@ impl Test for IoTest {
 
         // let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
         let mut cmd_name = String::from("valgrind");
-        if ! self.meta.projdef.use_valgrind.unwrap_or(true) {
+        if self.meta.projdef.sudo.is_some() {
+            cmd_name = format!("sudo -u {} {}", self.meta.projdef.sudo.as_ref().unwrap(), &cmd_name);
+        }
+        if !self.meta.projdef.use_valgrind.unwrap_or(true) {
             cmd_name = format!("./{}", self.meta.projdef.project_name);
             vg_flags.clear();
         }

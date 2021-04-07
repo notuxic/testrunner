@@ -16,6 +16,8 @@ pub struct ProjectDefinition {
     pub protected_mode: bool,
     #[serde(skip)]
     pub ws_hints: bool,
+    #[serde(skip)]
+    pub sudo: Option<String>,
     pub table_width: Option<u64>,
     pub use_valgrind: Option<bool>,
 }

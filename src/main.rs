@@ -58,6 +58,12 @@ fn main() {
             .value_name("JSON_OUTPUT")
             .default_value("testreport.json")
             .help("writes testresult in json format to specific file"))
+        .arg(Arg::with_name("sudo")
+            .long("sudo")
+            .takes_value(true)
+            .value_name("USER")
+            .hidden(true)
+            .help("runs program though sudo as user USER"))
         .arg(Arg::with_name("browser")
             .short("b")
             .requires("html")
@@ -81,6 +87,9 @@ fn main() {
     generator.set_diff_mode(diff_mode.to_string());
     generator.set_protected_mode(cli_args.occurrences_of("prot-html") > 0);
     generator.set_whitespace_hinting(cli_args.occurrences_of("no-wshints") == 0);
+    if cli_args.is_present("sudo") {
+        generator.set_sudo(cli_args.value_of("sudo"));
+    }
 
     match generator.generate_generateables() {
         Ok(_) => println!("Done generating"),

@@ -399,5 +399,12 @@ impl TestcaseGenerator {
     pub fn set_whitespace_hinting(&mut self, hints: bool) {
         self.config.project_definition.ws_hints = hints;
     }
+
+    pub fn set_sudo(&mut self, user: Option<&str>) {
+        self.config.project_definition.sudo = match user {
+            Some(x) => Some(String::from(x)),
+            None => None,
+        };
+    }
 }
 
