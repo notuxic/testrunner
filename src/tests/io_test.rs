@@ -1,6 +1,6 @@
 use std::fs::{create_dir_all, read_to_string};
 use std::io::Write;
-use std::time::{ Instant};
+use std::time::Instant;
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -34,35 +34,41 @@ impl Test for IoTest {
             println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
         }
 
-
-        create_dir_all(format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number)).expect("could not create valgrind_log folder");
-        let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number);
-
-        let mut vg_flags = match &self.meta.projdef.valgrind_flags {
-            Some(to) => to.clone(),
-            None => vec![String::from("--leak-check=full"), String::from("--track-origins=yes")],
+        let cmd_name = if self.meta.projdef.sudo.is_some() {
+            String::from("sudo")
+        } else if self.meta.projdef.use_valgrind.unwrap_or(true) {
+            String::from("valgrind")
+        } else {
+            String::from(format!("./{}", &self.meta.projdef.project_name))
         };
 
-        vg_flags.push(format!("--log-file={}", &vg_filepath ));
-        vg_flags.push(format!("./{}", &self.meta.projdef.project_name));
-        // vg_flags.append(&mut self.argv.clone() ); //.push(self.argv.clone());
+        let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number);
+        let mut flags = Vec::<String>::new();
+        if self.meta.projdef.sudo.is_some() {
+            flags.push(format!("--user={}", &self.meta.projdef.sudo.as_ref().unwrap()));
+            if self.meta.projdef.use_valgrind.unwrap_or(true) {
+                flags.push(String::from("valgrind"));
+            }
+        }
+        if self.meta.projdef.use_valgrind.unwrap_or(true) {
+            create_dir_all(format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number)).expect("could not create valgrind_log folder");
+            if let Some(v) = &self.meta.projdef.valgrind_flags {
+                flags.append(&mut v.clone());
+            }
+            else {
+                flags.push(String::from("--leak-check=full"));
+                flags.push(String::from("--track-origins=yes"));
+            }
+            flags.push(format!("--log-file={}", &vg_filepath ));
+            flags.push(format!("./{}", &self.meta.projdef.project_name));
+        }
 
         let starttime = Instant::now();
-
 
         let global_timeout = self.meta.projdef.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        // let (mut given_output, retvar) = command_timeout(run_cmd, timeout, self.meta.number);
-        let mut cmd_name = String::from("valgrind");
-        if self.meta.projdef.sudo.is_some() {
-            cmd_name = format!("sudo -u {} {}", self.meta.projdef.sudo.as_ref().unwrap(), &cmd_name);
-        }
-        if !self.meta.projdef.use_valgrind.unwrap_or(true) {
-            cmd_name = format!("./{}", self.meta.projdef.project_name);
-            vg_flags.clear();
-        }
-        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &vg_flags, timeout);
+        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, timeout);
 
         println!("Got output from testcase {}", self.meta.number);
 
@@ -267,7 +273,7 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
 }
 
 impl IoTest {
-    fn run_command_with_timeout(&self, command : &str, vg_args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
+    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
 
         let mut input: String = String::new();
         if !self.in_file.is_empty() {
@@ -319,7 +325,7 @@ impl IoTest {
 
 
         let mut command_with_args = String::from(format!("{:?}", command));
-        for elem in vg_args.iter() {
+        for elem in args.iter() {
             if !elem.is_empty() {
                 command_with_args.push_str(&format!(" {:?} ", elem));
             }
@@ -329,7 +335,6 @@ impl IoTest {
                 command_with_args.push_str(&format!(" {:?} ", elem));
             }
         }
-
 
         let mut cmd = subprocess::Exec::shell(command_with_args )
                     //.args(args)
@@ -382,4 +387,3 @@ impl IoTest {
         return (input, reference_output, _output, _retvar);
     }
 }
-
