@@ -1,6 +1,8 @@
-use std::fs::{create_dir_all, read_to_string};
+use std::fs::{create_dir_all, Permissions, set_permissions, read_dir, read_to_string};
 use std::io::Write;
 use std::time::Instant;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -34,7 +36,7 @@ impl Test for IoTest {
             println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
         }
 
-        let cmd_name = if self.meta.projdef.sudo.is_some() {
+        let cmd_name = if self.meta.projdef.sudo.is_some() && cfg!(unix) {
             String::from("sudo")
         } else if self.meta.projdef.use_valgrind.unwrap_or(true) {
             String::from("valgrind")
@@ -42,7 +44,8 @@ impl Test for IoTest {
             String::from(format!("./{}", &self.meta.projdef.project_name))
         };
 
-        let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number);
+        let dir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
+        let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &dir, &self.meta.number);
         let mut flags = Vec::<String>::new();
         if self.meta.projdef.sudo.is_some() {
             flags.push(format!("--user={}", &self.meta.projdef.sudo.as_ref().unwrap()));
@@ -51,7 +54,14 @@ impl Test for IoTest {
             }
         }
         if self.meta.projdef.use_valgrind.unwrap_or(true) {
-            create_dir_all(format!("{}/valgrind_logs/{}", &self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from(".")), &self.meta.number)).expect("could not create valgrind_log folder");
+            create_dir_all(format!("{}/valgrind_logs/{}", &dir, &self.meta.number)).expect("could not create valgrind_log folder");
+            #[cfg(unix)]
+            set_permissions(format!("{}/valgrind_logs", &dir), Permissions::from_mode(0o777)).unwrap();
+            #[cfg(unix)]
+            for entry in read_dir(format!("{}/valgrind_logs", &dir)).unwrap() {
+                set_permissions(entry.unwrap().path(), Permissions::from_mode(0o777)).unwrap();
+            }
+
             if let Some(v) = &self.meta.projdef.valgrind_flags {
                 flags.append(&mut v.clone());
             }
