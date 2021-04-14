@@ -48,6 +48,7 @@ impl Test for IoTest {
         let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &dir, &self.meta.number);
         let mut flags = Vec::<String>::new();
         if self.meta.projdef.sudo.is_some() {
+            flags.push(String::from("--preserve-env"));
             flags.push(format!("--user={}", &self.meta.projdef.sudo.as_ref().unwrap()));
             if self.meta.projdef.use_valgrind.unwrap_or(true) {
                 flags.push(String::from("valgrind"));
