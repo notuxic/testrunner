@@ -259,6 +259,14 @@ impl TestcaseGenerator {
                                 padding: 0.5em;
                                 border-left: darkred 0.4em solid
                             }}
+                            .success {{
+                                color: green;
+                                font-family: 'Hack', monospace;
+                            }}
+                            .fail {{
+                                color: darkred;
+                                font-family: 'Hack', monospace;
+                            }}
                             #flex-container {{
                                 display: flex;
                                 flex-direction: row;

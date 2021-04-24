@@ -78,13 +78,13 @@ impl TestResult {
                         }
                         tr {
                             th {:"Passed"}
-                            td {:format!("{}", self.passed)}
+                            td {:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                         }
 
                         @ if self.implemented.is_some() {
                             tr {
                                 th {:"Implemented"}
-                                td {:format!("{}", self.implemented.unwrap_or(false))}
+                                td {:format!("{}", if self.implemented.unwrap_or(false) { "yes" } else { "no" })}
                             }
                         }
 
@@ -97,7 +97,7 @@ impl TestResult {
 
                         tr {
                             th {:"Timeout"}
-                            td {:format!("{}", self.timeout)}
+                            td {:format!("{}", if self.timeout { "yes" } else { "no" })}
                         }
 
                         @ if self.exp_ret.is_some(){
@@ -172,9 +172,9 @@ impl TestResult {
             tr{
                 td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=#{}>#{:0>2}:&nbsp;{}</a>", &name, &self.number, &name)) }}
                 td{:format!("{}", self.kind)}
-                td{:format!("{}", self.passed)}
+                td{:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                 td{:format!("{}%", (self.distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
-                td{:format!("{}", self.timeout)}
+                td{:format!("{}", if self.timeout { "yes" } else { "no" })}
                 td{:format!("{}", self.vg_warnings)}
                 td{:format!("{}", self.vg_errors)}
                 td{@ if self.vg_logfile.is_empty() { : ""} else { : Raw(format!("<a target=\"_blank\" href=\"{}\">Open</a>", &self.vg_logfile ))  } }
