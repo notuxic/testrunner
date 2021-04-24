@@ -41,8 +41,9 @@ impl Test for UnitTest {
         Ok(TestResult {
             //diff2 : None,
             distance_percentage: None,
+            add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             kind: TestCaseKind::UnitTest,
-            passed: add_diff.as_ref().unwrap_or(&(String::from(""), 0)).1 == 0,
+            passed: add_diff.as_ref().unwrap_or(&(String::from(""), 0, 0.0)).1 == 0,
             diff: None,
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
             implemented: None,

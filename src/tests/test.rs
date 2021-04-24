@@ -3,6 +3,7 @@ use std::fs::File;
 use difference::Changeset;
 use serde_derive::Serialize;
 use super::diff::{changeset_to_html, diff_binary_to_html};
+use super::io_test::percentage_from_levenstein;
 use super::testcase::Testcase;
 use super::testresult::TestResult;
 use crate::project::definition::ProjectDefinition;
@@ -52,9 +53,12 @@ pub trait Test {
     ) -> Result<Self, GenerationError>
     where
         Self: Sized;
+
     //fn report(&self) -> Result<String,GenerationError>;
+
     fn get_test_meta(&self) -> &TestMeta;
-    fn get_add_diff(&self) -> Option<(String, i32)> {
+
+    fn get_add_diff(&self) -> Option<(String, i32, f32)> {
         let test_meta = self.get_test_meta();
 
         if test_meta.add_out_file.is_some() && test_meta.add_exp_file.is_some() {
@@ -91,18 +95,18 @@ pub trait Test {
                     let edit = format!("{}", String::from_utf8_lossy(&buf_user));
 
                     let changeset = Changeset::new(&orig, &edit, &test_meta.projdef.diff_mode);
-                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode, test_meta.projdef.ws_hints) {
-                        Ok(text) => Some((text, changeset.distance)),
+                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode, test_meta.projdef.ws_hints, "File") {
+                        Ok(text) => Some((text, changeset.distance, percentage_from_levenstein(changeset.distance, buf_ref.len(), buf_user.len()))),
                         Err(_) => None,
-                    }                    
+                    }
                 }
                 DiffKind::Binary => {
                     return match diff_binary_to_html(&buf_ref, &buf_user) {
-                        Ok(text) => Some(text),
+                        Ok(text) => Some((text.0, text.1, percentage_from_levenstein(text.1, buf_ref.len(), buf_user.len()))),
                         Err(_) => None,
-                    }                    
+                    }
                 }
- 
+
             }
         };
         None

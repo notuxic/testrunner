@@ -23,6 +23,7 @@ pub struct TestResult {
     #[serde(skip)]
     pub add_diff: Option<String>,
     pub distance_percentage: Option<f32>,
+    pub add_distance_percentage: Option<f32>,
     pub vg_warnings: i32,
     pub vg_errors: i32,
     pub vg_logfile: String,
@@ -43,11 +44,13 @@ pub struct TestResult {
 impl TestResult {
     pub fn get_json(&self) -> Result<serde_json::Value, GenerationError> {
         Ok(json!({
-            "name":self.name,
-            "kind":format!("{}",self.kind),
-            "passed":self.passed,
-            "implemented":self.implemented.unwrap_or(false),
-            "statuscode":self.ret.unwrap_or(0),
+            "name": self.name,
+            "kind": format!("{}",self.kind),
+            "passed": self.passed,
+            "distance": self.distance_percentage.unwrap_or(-1.0),
+            "add_distance": self.add_distance_percentage.unwrap_or(-1.0),
+            "implemented": self.implemented.unwrap_or(false),
+            "statuscode": self.ret.unwrap_or(0),
             //"diff": format!("{}",self.diff.as_ref().unwrap_or(&Changeset::new("","",""))),
             "vg_warnings": self.vg_warnings,
             "vg_errors": self.vg_errors,
@@ -90,8 +93,15 @@ impl TestResult {
 
                         @ if self.distance_percentage.is_some(){
                             tr {
-                                th {:"Diff-Percentage"}
+                                th {:"Output-Diff"}
                                 td {:format!("{}%", (self.distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
+                            }
+                        }
+
+                        @ if self.add_distance_percentage.is_some(){
+                            tr {
+                                th {:"File-Diff"}
+                                td {:format!("{}%", (self.add_distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
                             }
                         }
 
@@ -120,7 +130,7 @@ impl TestResult {
 
                     @ if self.diff.is_some() {
                         |templ| {
-                            &mut *templ << Raw(changeset_to_html(&self.diff.as_ref().unwrap(), compare_mode, with_ws_hints).unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
+                            &mut *templ << Raw(changeset_to_html(&self.diff.as_ref().unwrap(), compare_mode, with_ws_hints, "Output").unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
                         }
                     }
 
@@ -153,13 +163,6 @@ impl TestResult {
                                     }
                                 }));
                     }
-
-                    // table(id="args"){
-                    //     |templ|
-                    //     {
-                    //         &mut *templ << Raw( format!("<tr><th>command and arguments</th></tr><tr><td>{}</td></tr>", self.command_used) );
-                    //     }
-                    // }
                 }
             }
         };
@@ -168,12 +171,13 @@ impl TestResult {
 
     pub fn get_html_short(&self, protected_mode : bool) -> Result<String, GenerationError> {
         let name = self.name.replace("\"", "");
+        let distance = (self.distance_percentage.unwrap_or(1.0) + self.add_distance_percentage.unwrap_or(1.0)) / 2.0;
         let retvar = box_html! {
             tr{
                 td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=#{}>#{:0>2}:&nbsp;{}</a>", &name, &self.number, &name)) }}
                 td{:format!("{}", self.kind)}
                 td{:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
-                td{:format!("{}%", (self.distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
+                td{:format!("{}%", (distance * 1000.0).floor() / 10.0)}
                 td{:format!("{}", if self.timeout { "yes" } else { "no" })}
                 td{:format!("{}", self.vg_warnings)}
                 td{:format!("{}", self.vg_errors)}

@@ -103,7 +103,7 @@ impl Test for IoTest {
         let status = retvar; // TODO refactor
         let add_diff = self.get_add_diff();
         let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap()
-            && distance == 0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
+            && distance == 0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0, 0.0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
 
         if self.meta.projdef.verbose && distance != 0
         {
@@ -166,7 +166,7 @@ impl Test for IoTest {
 
         Ok(TestResult {
             diff: Some(changeset),
-            //diff: Some(diff),
+            add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
             implemented: None,
             passed,
@@ -185,8 +185,8 @@ impl Test for IoTest {
             kind: self.meta.kind,
             distance_percentage: Some(percentage_from_levenstein(
                     distance,
-                    &reference_output,
-                    &given_output,
+                    reference_output.len(),
+                    given_output.len(),
             )),
             protected: self.meta.protected,
         })
@@ -253,11 +253,11 @@ impl Test for IoTest {
     }
 }
 
-pub fn percentage_from_levenstein(steps: i32, source: &String, target: &String) -> f32 {
-    if (source.len() == 0) || (target.len() == 0) {
+pub fn percentage_from_levenstein(steps: i32, source_len: usize, target_len: usize) -> f32 {
+    if (source_len == 0) || (target_len == 0) {
         return 0.0;
     } else {
-        return 1.0 - ((steps as f32) / (source.len() as f32).max(target.len() as f32));
+        return 1.0 - ((steps as f32) / (source_len as f32).max(target_len as f32));
     }
 }
 

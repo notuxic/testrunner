@@ -116,7 +116,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
     Ok((String::from(retvar), distance))
 }
 
-pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints: bool) -> Result<String, HTMLError> {
+pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, HTMLError> {
     let line_end = if compare_mode == "\n" { "\n" } else { "" };
 
     let retvar = format!(
@@ -178,7 +178,7 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
                             diffleft = diffleft.replace("\n", "<br />").replace("\0", "<br />");
                         }
 
-                        &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diffright, diffleft));
+                        &mut *templ << Raw(format!("<tr><th>Reference {}</th><th>Your {}</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", source_name, source_name, diffright, diffleft));
                     }
                 }
             }

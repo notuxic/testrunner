@@ -335,7 +335,7 @@ impl TestcaseGenerator {
                                          : "Passed"
                                      }
                                      th{
-                                         : "Percentage"
+                                         : "Diff"
                                      }
                                      th{
                                          : "Timeout"
