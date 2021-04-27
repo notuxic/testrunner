@@ -11,7 +11,7 @@ use crate::project::binary::{Binary, GenerationError};
 #[allow(dead_code)]
 pub struct TestcaseGenerator {
     test_cases: Vec<Box<dyn Test + Send + Sync>>,
-    test_results: Vec<TestResult>,
+    pub test_results: Vec<TestResult>,
     binary: Binary,
     config: TestDefinition,
 }

@@ -3,10 +3,12 @@ extern crate horrorshow;
 #[macro_use]
 extern crate maplit;
 
+
 use std::fs::{read_to_string, write};
 use std::process::Command;
 use clap::{App, Arg, crate_authors, crate_description, crate_version};
 use crate::tests::generator::TestcaseGenerator;
+use crate::tests::testresult::TestResult;
 
 mod tests;
 mod project;
@@ -75,6 +77,7 @@ fn main() {
             .help("prints diff to stdout"))
         .get_matches();
 
+
     let config = read_to_string(cli_args.value_of("config").unwrap()).expect( &format!("cannot open or read config file {}", cli_args.value_of("config").unwrap()));
     let diff_mode = match cli_args.value_of("diff_mode").unwrap() {
         "c" => "",
@@ -100,6 +103,11 @@ fn main() {
         Ok(_) => println!("Done testing"),
         Err(e) => eprintln!("Error running: {}", e),
     };
+
+    println!("passed {}/{} testcases", generator.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len(), generator.test_results.len());
+
+    // let tc_all_num = self.test_results.len();
+    // let tc_all_passed = self.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
 
     if let Some(html_out) = cli_args.value_of("html") {
         if html_out != "NONE" {
