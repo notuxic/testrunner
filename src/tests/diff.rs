@@ -51,24 +51,23 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                     |templ| {
                         let mut diffright = String::new();
                         let mut diffleft = String::new();
-                        let mut linesleft: isize = 0;
                         let mut linesright: isize = 0;
+                        let mut linesleft: isize = 0;
                         let mut linescarry: isize = 0;
-                        let mut offright = 0;
                         let mut offleft = 0;
+                        let mut offright = 0;
 
                         for c in &changeset.diffs {
                             match *c {
                                 Difference::Same(ref z)=>
                                 {
-                                    linesleft += linescarry;
-                                    linescarry = 0;
-                                    let linesdiff = linesleft - linesright;
-                                    if linesdiff > 0 {
-                                        for _ in 0..linesdiff {
-                                            diffright.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
-                                            linesright += 1;
+                                    if linescarry > 0 {
+                                        for _ in 0..linescarry {
+                                            diffleft.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                            linesleft += 1;
                                         }
+                                        linesright += linescarry;
+                                        linescarry = 0;
                                     }
 
                                     diffright.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offright, &mut linesright)));
@@ -78,31 +77,31 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
                                 {
                                     diffright.push_str(&format!("<span id =\"diff-remove\">{}\n</span>",
                                             decdata_to_hexdump(z, &mut offright, &mut linesright)));
-                                    linesleft += linescarry;
-                                    linescarry = 0;
+                                    linescarry = linesright - linesleft;
+                                    linesright -= linescarry;
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
                                     diffleft.push_str(&format!("<span id =\"diff-add\">{}\n</span>",
                                             decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
-                                    linescarry = linesleft - linesright;
-                                    linesleft -= linescarry;
+                                    linesright += linescarry;
+                                    linescarry = 0;
                                 }
                             }
 
-                            let linesdiff = linesleft - linesright;
+                            let linesdiff = linesright - linesleft;
                             if linesdiff > 0 {
                                 for _ in 0..linesdiff {
-                                    diffright.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
-                                    linesright += 1;
+                                    diffleft.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                    linesleft += 1;
                                 }
                             }
                             else if linesdiff < 0 {
                                 let linesdiff = linesdiff * -1;
                                 for _ in 0..linesdiff {
-                                    diffleft.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
-                                    linesleft += 1;
+                                    diffright.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                                    linesright += 1;
                                 }
                             }
                         }
