@@ -1,4 +1,5 @@
 use std::fs::{create_dir_all, Permissions, set_permissions, read_dir, read_to_string};
+use std::io;
 use std::io::Write;
 use std::time::Instant;
 #[cfg(unix)]
@@ -83,10 +84,7 @@ impl Test for IoTest {
 
         println!("Got output from testcase {}", self.meta.number);
 
-        let mut had_timeout = true;
-        if retvar.is_some() {
-            had_timeout = false;
-        }
+        let had_timeout = !retvar.is_some();
 
         if given_output.len() >= reference_output.len() * 2 {
             let output_length = std::cmp::min( reference_output.len()  * 2 ,  given_output.len() );
@@ -99,7 +97,7 @@ impl Test for IoTest {
         // make changeset
         let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_mode);
 
-        let distance = changeset.distance;//get_distance(&reference_output, &given_output.0);
+        let distance = changeset.distance;
         let status = retvar; // TODO refactor
         let add_diff = self.get_add_diff();
         let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap()
@@ -233,7 +231,7 @@ impl Test for IoTest {
             meta,
             binary: binary.unwrap().clone(),
             exp_retvar: testcase.exp_retvar,
-            argv: testcase.args.as_ref().unwrap_or(&vec![String::new()]).clone(), //testcase.args.as_ref().unwrap_or(&String::new()).clone(),
+            argv: testcase.args.as_ref().unwrap_or(&vec![String::new()]).clone(),
             in_file: testcase.in_file.as_ref().unwrap_or(&String::new()).clone(),
             exp_file: testcase.exp_file.as_ref().unwrap_or(&String::new()).clone(),
             in_string: testcase
@@ -347,54 +345,72 @@ impl IoTest {
             }
         }
 
-        let mut cmd = subprocess::Exec::shell(command_with_args )
-                    //.args(args)
-                    .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
-                    //.stdin(input.as_ref())
-                    .stdin(subprocess::Redirection::Pipe)
-                    .stdout(subprocess::Redirection::Pipe)
-                    .stderr(subprocess::NullFile)
-                    .env_extend(&envs)
-                    .popen()
-                    .expect("Could not spawn process");
+        let mut cmd = subprocess::Exec::shell(command_with_args)
+            //.args(args)
+            .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
+            .stdin(subprocess::Redirection::Pipe)
+            .stdout(subprocess::Redirection::Pipe)
+            .stderr(subprocess::NullFile)
+            .env_extend(&envs)
+            .popen()
+            .expect("Could not spawn process!");
 
 
-        let mut _retvar = Some(-99);
-        let mut _output = String::new();
+        let given_retvar;
+        let given_output;
 
-        let capture = cmd.communicate_start(Some( input.as_bytes().iter().cloned().collect() ) )
-                                        .limit_time(std::time::Duration::new(timeout , 0))
-                                        .read();
-
-        if cmd.poll().is_none() && cmd.exit_status().is_none() {
-            println!("Killing testcase {} because of timeout", self.meta.number); //if self.meta.protected {"**"} else {&self.meta.number.to_string()} );
-            cmd.kill().expect("Upps, can't kill this one");
-            cmd.wait().expect("failed wating for kill");
-            _retvar = None;
-        }
+        let capture = cmd.communicate_start(Some(input.as_bytes().iter().cloned().collect()))
+            .limit_time(std::time::Duration::new(timeout , 0))
+            .read();
 
         match capture {
             Ok(c) => {
-                _output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())) );
+                given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
+                    Some(retvar) => Some(retvar),
+                    None => {
+                        println!("Testcase {} is still running, killing testcase!", self.meta.number);
+                        cmd.kill().expect("Could not kill testcase!");
+                        if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
+                            println!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
+                        }
+                        None
+                    }
+                };
+
+                given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
             }
+
             Err(e) => {
-                println!("error={:?}", e);
-                _output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())) );
+                if e.kind() == io::ErrorKind::TimedOut {
+                    println!("Testcase {} ran into a timeout!", self.meta.number);
+                }
+
+                given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
+                    Some(retvar) => Some(retvar),
+                    None => {
+                        println!("Testcase {} is still running, killing testcase!", self.meta.number);
+                        cmd.kill().expect("Could not kill testcase!");
+                        if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
+                            println!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
+                        }
+                        None
+                    }
+                };
+
+                println!("Possibly failed capturing some/all output!");
+                given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
             }
         }
 
-        match cmd.exit_status().unwrap_or(subprocess::ExitStatus::Undetermined) {
-            subprocess::ExitStatus::Exited(code) => {
-                _retvar = Some(code as i32);
+        let given_retvar = match given_retvar {
+            Some(v) => match v {
+                subprocess::ExitStatus::Exited(retvar) => Some(retvar as i32),
+                subprocess::ExitStatus::Other(retvar) => Some(retvar),
+                _ => None,
             }
-            subprocess::ExitStatus::Other(code) => {
-                _retvar = Some(code);
-            }
-            _ => {
+            None => None,
+        };
 
-            }
-        }
-
-        return (input, reference_output, _output, _retvar);
+        return (input, reference_output, given_output, given_retvar);
     }
 }

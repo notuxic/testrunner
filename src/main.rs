@@ -100,14 +100,13 @@ fn main() {
     };
 
     match generator.run_generateables() {
-        Ok(_) => println!("Done testing"),
+        Ok(_) => {
+            println!("\nDone testing");
+            println!("Passed testcases: {} / {}", generator.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len(), generator.test_results.len());
+        },
         Err(e) => eprintln!("Error running: {}", e),
     };
 
-    println!("passed {}/{} testcases", generator.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len(), generator.test_results.len());
-
-    // let tc_all_num = self.test_results.len();
-    // let tc_all_passed = self.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
 
     if let Some(html_out) = cli_args.value_of("html") {
         if html_out != "NONE" {
