@@ -65,7 +65,7 @@ impl TestResult {
             div(id="long_report") {
                 div(id = "title") {
                     h2 {
-                        : Raw(format!("#{:0>2}:&nbsp;<a id={}></a>{} <a class=\"link-summary\" href=\"#summary\">(back to summary)</a>", &self.number, &self.name, &self.name))
+                        : Raw(format!("#{:0>2}:&nbsp;<a id=\"tc-{}\"></a>{} <a class=\"link-summary\" href=\"#summary\">(back to summary)</a>", &self.number, &self.number, &self.name))
                     }
                 }
                 div(id="description") {
@@ -174,7 +174,7 @@ impl TestResult {
         let distance = (self.distance_percentage.unwrap_or(1.0) + self.add_distance_percentage.unwrap_or(1.0)) / 2.0;
         let retvar = box_html! {
             tr{
-                td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=#{}>#{:0>2}:&nbsp;{}</a>", &name, &self.number, &name)) }}
+                td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=\"#tc-{}\">#{:0>2}:&nbsp;{}</a>", &self.number, &self.number, &name)) }}
                 td{:format!("{}", self.kind)}
                 td{:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                 td{:format!("{}%", (distance * 1000.0).floor() / 10.0)}
