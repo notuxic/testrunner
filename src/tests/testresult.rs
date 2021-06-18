@@ -24,9 +24,9 @@ pub struct TestResult {
     pub add_diff: Option<String>,
     pub distance_percentage: Option<f32>,
     pub add_distance_percentage: Option<f32>,
-    pub vg_warnings: i32,
-    pub vg_errors: i32,
-    pub vg_logfile: String,
+    pub mem_leaks: i32,
+    pub mem_errors: i32,
+    pub mem_logfile: String,
     pub command_used: String,
     pub used_input: String,
     pub timeout: bool,
@@ -52,8 +52,8 @@ impl TestResult {
             "implemented": self.implemented.unwrap_or(false),
             "statuscode": self.ret.unwrap_or(0),
             //"diff": format!("{}",self.diff.as_ref().unwrap_or(&Changeset::new("","",""))),
-            "vg_warnings": self.vg_warnings,
-            "vg_errors": self.vg_errors,
+            "vg_warnings": self.mem_leaks,
+            "vg_errors": self.mem_errors,
             "timeout": self.timeout,
             "result": self.result.clone(),
             "protected" : self.protected,
@@ -122,8 +122,8 @@ impl TestResult {
                         }
 
                         tr {
-                            th {:"Valgrind Warnings/Errors"}
-                            td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.vg_warnings, self.vg_errors, self.vg_logfile))}
+                            th {:"Memory Usage-Errors / Leaks"}
+                            td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.mem_errors, self.mem_leaks, self.mem_logfile))}
                         }
                     }
 
@@ -175,13 +175,12 @@ impl TestResult {
         let retvar = box_html! {
             tr{
                 td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=\"#tc-{}\">#{:0>2}:&nbsp;{}</a>", &self.number, &self.number, &name)) }}
-                td{:format!("{}", self.kind)}
                 td{:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                 td{:format!("{}%", (distance * 1000.0).floor() / 10.0)}
                 td{:format!("{}", if self.timeout { "yes" } else { "no" })}
-                td{:format!("{}", self.vg_warnings)}
-                td{:format!("{}", self.vg_errors)}
-                td{@ if self.vg_logfile.is_empty() { : ""} else { : Raw(format!("<a target=\"_blank\" href=\"{}\">Open</a>", &self.vg_logfile ))  } }
+                td{:format!("{}", self.mem_errors)}
+                td{:format!("{}", self.mem_leaks)}
+                td{@ if self.mem_logfile.is_empty() { : ""} else { : Raw(format!("<a target=\"_blank\" href=\"{}\">Open</a>", &self.mem_logfile ))  } }
             }
         };
         Ok(String::from(format!("{}", retvar)))

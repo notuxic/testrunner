@@ -69,6 +69,7 @@ impl Test for IoTest {
             }
             else {
                 flags.push(String::from("--leak-check=full"));
+                flags.push(String::from("--show-leak-kinds=all"));
                 flags.push(String::from("--track-origins=yes"));
             }
             flags.push(format!("--log-file={}", &vg_filepath ));
@@ -150,7 +151,7 @@ impl Test for IoTest {
         }
 
         let valgrind = parse_vg_log(&vg_filepath).unwrap_or((-1, -1));
-        println!("Valgrind warnings: {:?}\nValgrind errors: {:?}", valgrind.0, valgrind.1);
+        println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
         let endtime = Instant::now();
         println!("Testcase took {:?}", endtime.duration_since(starttime));
@@ -171,9 +172,9 @@ impl Test for IoTest {
             result: given_output.clone(),
             ret: status,
             exp_ret: self.exp_retvar,
-            vg_warnings: valgrind.0,
-            vg_errors: valgrind.1,
-            vg_logfile: vg_filepath,
+            mem_leaks: valgrind.0,
+            mem_errors: valgrind.1,
+            mem_logfile: vg_filepath,
             command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().join(" "))),
             used_input: input,
             timeout: had_timeout,
@@ -260,14 +261,14 @@ pub fn percentage_from_levenstein(steps: i32, source_len: usize, target_len: usi
 }
 
 pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
-    let re = Regex::new(r"ERROR SUMMARY: (?P<err>[0-9]+) errors? from (?P<warn>[0-9]+) contexts?")
+    let re = Regex::new(r"(?s)in use at exit: [0-9]+ bytes? in (?P<leaks>[0-9]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9]+) errors? from [0-9]+ contexts?")
         .unwrap();
     let mut retvar = (-1, 1);
     match read_to_string(filepath) {
         Ok(content) => match re.captures_iter(&content).last() {
             Some(cap) => {
-                retvar.0 = cap["warn"].parse().unwrap_or(-1);
-                retvar.1 = cap["err"].parse().unwrap_or(-1);
+                retvar.0 = cap["leaks"].parse().unwrap_or(-1);
+                retvar.1 = cap["errors"].parse().unwrap_or(-1);
                 return Ok(retvar);
             }
             None => {

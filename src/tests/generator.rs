@@ -329,9 +329,6 @@ impl TestcaseGenerator {
                                          : "Name"
                                      }
                                      th{
-                                         : "Type"
-                                     }
-                                     th{
                                          : "Passed"
                                      }
                                      th{
@@ -341,13 +338,13 @@ impl TestcaseGenerator {
                                          : "Timeout"
                                      }
                                      th{
-                                         : "Valgrind Warnings"
+                                         : "Mem Usage Errors"
                                      }
                                      th{
-                                         : "Valgrind Errors"
+                                         : "Mem Leaks"
                                      }
                                      th{
-                                         : "Valgrind Log"
+                                         : "Mem Analyzer Log"
                                      }
                                      |templ| {
                                          for tc in self.test_results.iter() {
