@@ -261,14 +261,14 @@ pub fn percentage_from_levenstein(steps: i32, source_len: usize, target_len: usi
 }
 
 pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
-    let re = Regex::new(r"(?s)in use at exit: [0-9]+ bytes? in (?P<leaks>[0-9]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9]+) errors? from [0-9]+ contexts?")
+    let re = Regex::new(r"(?s)in use at exit: [0-9,]+ bytes? in (?P<leaks>[0-9,]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9,]+) errors? from [0-9,]+ contexts?")
         .unwrap();
     let mut retvar = (-1, 1);
     match read_to_string(filepath) {
         Ok(content) => match re.captures_iter(&content).last() {
             Some(cap) => {
-                retvar.0 = cap["leaks"].parse().unwrap_or(-1);
-                retvar.1 = cap["errors"].parse().unwrap_or(-1);
+                retvar.0 = cap["leaks"].replace(",", "").parse().unwrap_or(-1);
+                retvar.1 = cap["errors"].replace(",", "").parse().unwrap_or(-1);
                 return Ok(retvar);
             }
             None => {
