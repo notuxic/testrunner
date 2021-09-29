@@ -8,6 +8,7 @@ pub struct ProjectDefinition {
     pub lib_path: Option<String>,
     pub global_timeout : Option<u64>,
     pub valgrind_flags : Option<Vec<String>>,
+    pub valgrind_log_folder: Option<String>,
     #[serde(skip)]
     pub verbose: bool,
     #[serde(skip)]

@@ -46,7 +46,8 @@ impl Test for IoTest {
         };
 
         let dir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
-        let vg_filepath = format!("{}/valgrind_logs/{}/vg_log.txt", &dir, &self.meta.number);
+        let vg_log_folder = self.meta.projdef.valgrind_log_folder.clone().unwrap_or(String::from("valgrind_logs"));
+        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number);
         let mut flags = Vec::<String>::new();
         if self.meta.projdef.sudo.is_some() {
             flags.push(String::from("--preserve-env"));
@@ -56,11 +57,11 @@ impl Test for IoTest {
             }
         }
         if self.meta.projdef.use_valgrind.unwrap_or(true) {
-            create_dir_all(format!("{}/valgrind_logs/{}", &dir, &self.meta.number)).expect("could not create valgrind_log folder");
+            create_dir_all(format!("{}/{}/{}", &dir, vg_log_folder, &self.meta.number)).expect("could not create valgrind_log folder");
             #[cfg(unix)]
-            set_permissions(format!("{}/valgrind_logs", &dir), Permissions::from_mode(0o777)).unwrap();
+            set_permissions(format!("{}/{}", &dir, vg_log_folder), Permissions::from_mode(0o777)).unwrap();
             #[cfg(unix)]
-            for entry in read_dir(format!("{}/valgrind_logs", &dir)).unwrap() {
+            for entry in read_dir(format!("{}/{}", &dir, vg_log_folder)).unwrap() {
                 set_permissions(entry.unwrap().path(), Permissions::from_mode(0o777)).unwrap();
             }
 
