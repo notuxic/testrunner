@@ -149,11 +149,11 @@ impl Test for IoTest {
             colored_stdout.reset().unwrap();
         }
 
-        let valgrind = parse_vg_log(&vg_filepath).unwrap_or((-1, -1));
         if cfg!(unix) && self.meta.projdef.sudo.is_some() {
             copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number)).unwrap();
             remove_file(&vg_filepath).unwrap_or(());
         }
+        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
         println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
         let endtime = Instant::now();
