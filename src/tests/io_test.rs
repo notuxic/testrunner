@@ -1,12 +1,11 @@
-use std::fs::{create_dir_all, Permissions, set_permissions, read_dir, read_to_string};
+use std::fs::{copy, create_dir_all, read_to_string, remove_file};
 use std::io;
 use std::io::Write;
 use std::time::Instant;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use uuid::Uuid;
 use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
 use super::testresult::TestResult;
 use super::testcase::Testcase;
@@ -47,7 +46,12 @@ impl Test for IoTest {
 
         let dir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
         let vg_log_folder = self.meta.projdef.valgrind_log_folder.clone().unwrap_or(String::from("valgrind_logs"));
-        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number);
+        let vg_filepath = if cfg!(unix) && self.meta.projdef.sudo.is_some() {
+            format!("{}/testrunner-{}", std::env::temp_dir().to_str().unwrap(), Uuid::new_v4().to_simple().to_string())
+        } else {
+            format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, self.meta.number)
+        };
+
         let mut flags = Vec::<String>::new();
         if self.meta.projdef.sudo.is_some() {
             flags.push(String::from("--preserve-env"));
@@ -58,12 +62,6 @@ impl Test for IoTest {
         }
         if self.meta.projdef.use_valgrind.unwrap_or(true) {
             create_dir_all(format!("{}/{}/{}", &dir, vg_log_folder, &self.meta.number)).expect("could not create valgrind_log folder");
-            #[cfg(unix)]
-            set_permissions(format!("{}/{}", &dir, vg_log_folder), Permissions::from_mode(0o777)).unwrap();
-            #[cfg(unix)]
-            for entry in read_dir(format!("{}/{}", &dir, vg_log_folder)).unwrap() {
-                set_permissions(entry.unwrap().path(), Permissions::from_mode(0o777)).unwrap();
-            }
 
             if let Some(v) = &self.meta.projdef.valgrind_flags {
                 flags.append(&mut v.clone());
@@ -152,6 +150,10 @@ impl Test for IoTest {
         }
 
         let valgrind = parse_vg_log(&vg_filepath).unwrap_or((-1, -1));
+        if cfg!(unix) && self.meta.projdef.sudo.is_some() {
+            copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number)).unwrap();
+            remove_file(&vg_filepath).unwrap_or(());
+        }
         println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
         let endtime = Instant::now();

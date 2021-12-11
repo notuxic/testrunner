@@ -1,6 +1,6 @@
 [package]
 name = "testrunner"
-version = "1.2.18"
+version = "1.2.19"
 authors = ["Thomas Brunner <t.brunner@student.tugraz.at>", "Florian Hager <florian.hager@student.tugraz.at>", "Mathias Kahr <m.kahr@student.tugraz.at>", "Kilian Payer <kilian.payer@student.tugraz.at>"]
 edition = "2018"
 
@@ -26,4 +26,5 @@ signal-hook = "0.3.7"
 subprocess = "0.2.6"
 termcolor = "1.1.1"
 toml = "0.5.6"
+uuid = { version = "0.8", features = ["v4"] }
 
