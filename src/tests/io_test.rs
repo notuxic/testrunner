@@ -1,7 +1,9 @@
-use std::fs::{copy, create_dir_all, read_to_string, remove_file};
+use std::fs::{copy, create_dir_all, Permissions, read_to_string, remove_file, set_permissions};
 use std::io;
 use std::io::Write;
 use std::time::Instant;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use difference::{Changeset, Difference};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -61,7 +63,11 @@ impl Test for IoTest {
             }
         }
         if self.meta.projdef.use_valgrind.unwrap_or(true) {
-            create_dir_all(format!("{}/{}/{}", &dir, vg_log_folder, &self.meta.number)).expect("could not create valgrind_log folder");
+            create_dir_all(format!("{}/{}/{}", &dir, &vg_log_folder, &self.meta.number)).expect("could not create valgrind_log folder");
+            #[cfg(unix)] {
+                set_permissions(format!("{}/{}", &dir, &vg_log_folder), Permissions::from_mode(0o750)).unwrap();
+                set_permissions(format!("{}/{}/{}", &dir, &vg_log_folder, &self.meta.number), Permissions::from_mode(0o750)).unwrap();
+            }
 
             if let Some(v) = &self.meta.projdef.valgrind_flags {
                 flags.append(&mut v.clone());
