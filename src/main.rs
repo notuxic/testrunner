@@ -66,10 +66,6 @@ fn main() {
             .value_name("USER")
             .hidden(true)
             .help("runs program though sudo as user USER"))
-        .arg(Arg::with_name("browser")
-            .short("b")
-            .requires("html")
-            .help("opens the html file with xdg-open"))
         .arg(Arg::with_name("verbose")
             .short("v")
             .long("verbose")
@@ -114,14 +110,6 @@ fn main() {
                 .make_html_report(diff_mode, false)
                 .expect("could not make html report");
             write(html_out, output).expect("cannot write html file");
-
-            if cli_args.is_present("browser") {
-                println!("open browser");
-                Command::new("xdg-open")
-                    .arg(html_out)
-                    .spawn()
-                    .expect("cannot start xdg-open");
-            }
         }
     }
 
@@ -131,14 +119,6 @@ fn main() {
             .make_html_report(diff_mode, true)
             .expect("could not make html report");
         write(prot_html_out, output).expect("cannot write html file");
-
-        if cli_args.is_present("browser") {
-            println!("open browser");
-            Command::new("xdg-open")
-                .arg(prot_html_out)
-                .spawn()
-                .expect("cannot start xdg-open");
-        }
     }
 
     if cli_args.occurrences_of("json") > 0 {
