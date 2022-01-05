@@ -94,8 +94,8 @@ pub trait Test {
                     let orig = format!("{}", String::from_utf8_lossy(&buf_ref));
                     let edit = format!("{}", String::from_utf8_lossy(&buf_user));
 
-                    let changeset = Changeset::new(&orig, &edit, &test_meta.projdef.diff_mode);
-                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_mode, test_meta.projdef.ws_hints, "File") {
+                    let changeset = Changeset::new(&orig, &edit, &test_meta.projdef.diff_delim);
+                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_delim, test_meta.projdef.ws_hints, "File") {
                         Ok(text) => Some((text, changeset.distance, percentage_from_levenstein(changeset.distance, buf_ref.len(), buf_user.len()))),
                         Err(_) => None,
                     }

@@ -43,7 +43,7 @@ impl Test for IoTest {
         } else if self.meta.projdef.use_valgrind.unwrap_or(true) {
             String::from("valgrind")
         } else {
-            String::from(format!("./{}", &self.meta.projdef.project_name))
+            String::from(format!("./{}", &self.meta.projdef.binary_path))
         };
 
         let dir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
@@ -78,7 +78,7 @@ impl Test for IoTest {
                 flags.push(String::from("--track-origins=yes"));
             }
             flags.push(format!("--log-file={}", &vg_filepath ));
-            flags.push(format!("./{}", &self.meta.projdef.project_name));
+            flags.push(format!("./{}", &self.meta.projdef.binary_path));
         }
 
         let starttime = Instant::now();
@@ -101,7 +101,7 @@ impl Test for IoTest {
 
 
         // make changeset
-        let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_mode);
+        let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_delim);
 
         let distance = changeset.distance;
         let status = retvar; // TODO refactor
@@ -184,7 +184,7 @@ impl Test for IoTest {
             mem_leaks: valgrind.0,
             mem_errors: valgrind.1,
             mem_logfile: vg_filepath,
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().join(" "))),
+            command_used: String::from(format!("./{} {}", &self.meta.projdef.binary_path, &self.argv.clone().join(" "))),
             used_input: input,
             timeout: had_timeout,
             name: self.meta.name.clone(),

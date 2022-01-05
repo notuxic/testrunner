@@ -1,14 +1,14 @@
 use std::fmt;
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use regex::Regex;
 use serde_derive::Serialize;
 use super::definition::ProjectDefinition;
 
+
 #[derive(Debug)]
 pub enum GenerationError {
-    None,
-    MakeFileRequired,
     ConfigErrorIO,
     BinaryRequired,
     VgLogNotFound,
@@ -19,10 +19,10 @@ pub enum GenerationError {
 
 #[derive(Debug)]
 pub enum CompileError {
-    None,
-    NoMakefile,
+    BinaryNotFound,
+    MakefileNotDefined,
+    MakefileNotFound,
     MakeFailed,
-    NoIssuesReported,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -51,11 +51,40 @@ impl Binary {
         Ok(retvar)
     }
 
+    pub fn exists(&self) -> bool {
+        Path::new(&self.project_definition.binary_path).is_file()
+    }
+
     pub fn compile(&mut self) -> Result<(), CompileError> {
+        // use pre-compiled binary
+        if self.project_definition.make_targets.is_none() {
+            if self.exists() {
+                return Ok(());
+            }
+            else {
+                return Err(CompileError::BinaryNotFound);
+            }
+        }
+        // use `make`
+        else if self.project_definition.make_targets.is_some() {
+            self.compile_with_make()
+        }
+        // satisfy the compiler
+        else {
+            Ok(())
+        }
+    }
+
+    pub fn compile_with_make(&mut self) -> Result<(), CompileError> {
         let makefile_path = match &self.project_definition.makefile_path {
-            Some(expr) => expr.clone(),
+            Some(mk_path) => if Path::new(&mk_path).is_file() {
+                    mk_path.clone()
+                }
+                else {
+                    return Err(CompileError::MakefileNotFound);
+                },
             None => {
-                return Err(CompileError::NoMakefile);
+                return Err(CompileError::MakefileNotDefined);
             }
         };
 
@@ -63,14 +92,12 @@ impl Binary {
         make_cmd.current_dir(makefile_path);
         make_cmd.stderr(Stdio::piped());
         make_cmd.stdout(Stdio::piped());
-        if self.project_definition.maketarget.is_some() {
-            make_cmd.arg(
-                self.project_definition
-                .maketarget
-                .clone()
-                .unwrap_or(String::new()),
-            );
-        }
+        make_cmd.args(self.project_definition
+            .make_targets
+            .clone()
+            .unwrap_or(vec![]),
+        );
+
         match make_cmd.output() {
             Ok(res) => {
                 let errorstring = String::from_utf8(res.stderr).unwrap_or_default();
@@ -98,13 +125,13 @@ impl Binary {
                         self.info.warnings = Some(warnings);
                     }
                 }
+                Ok(())
             }
             Err(err) => {
                 println!("Compilation failed: {:?}", err);
-                return Err(CompileError::MakeFailed);
+                Err(CompileError::MakeFailed)
             }
         }
-        Ok(())
     }
 }
 
@@ -114,8 +141,6 @@ impl std::fmt::Display for GenerationError {
             f,
             "GenerationError: {}",
             match self {
-                GenerationError::None => "None".to_string(),
-                GenerationError::MakeFileRequired => "MakeFileRequired".to_string(),
                 GenerationError::ConfigErrorIO => "ConfigErrorIO".to_string(),
                 GenerationError::BinaryRequired => "BinaryRequired".to_string(),
                 GenerationError::VgLogNotFound => "VgLogNotFound".to_string(),

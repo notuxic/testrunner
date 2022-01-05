@@ -273,7 +273,7 @@ impl TestcaseGenerator {
                                 justify-content: center;
                                 align-items: center
                             }}
-                        "#, self.config.project_definition.table_width.unwrap_or(82), self.config.project_definition.table_width.unwrap_or(82)))
+                        "#, self.config.project_definition.diff_table_width.unwrap_or(82), self.config.project_definition.diff_table_width.unwrap_or(82)))
                 }
                 body{
                     h1 : "Testreport";
@@ -393,8 +393,8 @@ impl TestcaseGenerator {
         self.config.project_definition.verbose = verbose;
     }
 
-    pub fn set_diff_mode(&mut self, diff_mode: String) {
-        self.config.project_definition.diff_mode = diff_mode;
+    pub fn set_diff_delimiter(&mut self, diff_delim: String) {
+        self.config.project_definition.diff_delim = diff_delim;
     }
 
     pub fn set_protected_mode(&mut self, prot: bool) {

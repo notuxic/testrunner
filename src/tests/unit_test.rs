@@ -53,7 +53,7 @@ impl Test for UnitTest {
             mem_errors: 0,
             mem_leaks: 0,
             mem_logfile: String::from(""),
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.project_name, &self.argv.clone().join(" "))),
+            command_used: String::from(format!("./{} {}", &self.meta.projdef.binary_path, &self.argv.clone().join(" "))),
             used_input: String::from(""),
             timeout: false,
             name: self.meta.name.clone(),
@@ -106,7 +106,7 @@ impl Test for UnitTest {
 }
 
 fn run(test: &UnitTest) -> Result<(), Box<dyn std::error::Error>> {
-    let test_lib = lib::Library::new(test.meta.projdef.lib_path.as_ref().expect("test library unknown"))?;
+    let test_lib = lib::Library::new(test.meta.projdef.library_path.as_ref().expect("test library unknown"))?;
     unsafe {
         let func: lib::Symbol<unsafe extern fn() -> ()> = test_lib.get(test.fname.as_str().as_bytes())?;
         func();
