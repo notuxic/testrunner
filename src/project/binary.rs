@@ -20,6 +20,7 @@ pub enum GenerationError {
 #[derive(Debug)]
 pub enum CompileError {
     BinaryNotFound,
+    CompilationFailed,
     MakefileNotDefined,
     MakefileNotFound,
     MakeFailed,
@@ -106,6 +107,7 @@ impl Binary {
                     self.info.compiled = false;
                     self.info.errors = Some(errorstring);
                     println!("Compilation failed!");
+                    Err(CompileError::CompilationFailed)
                 }
                 else {
                     self.info.compiled = true;
@@ -124,8 +126,8 @@ impl Binary {
                         }
                         self.info.warnings = Some(warnings);
                     }
+                    Ok(())
                 }
-                Ok(())
             }
             Err(err) => {
                 println!("Compilation failed: {:?}", err);
