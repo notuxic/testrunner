@@ -4,14 +4,13 @@ use horrorshow::helper::doctype;
 use super::test::Test;
 use super::testcase::TestDefinition;
 use super::testresult::TestResult;
-use super::unit_test::UnitTest;
 use super::io_test::IoTest;
 use crate::project::binary::{Binary, GenerationError};
 
 #[allow(dead_code)]
 pub struct TestcaseGenerator {
-    test_cases: Vec<Box<dyn Test + Send + Sync>>,
-    pub test_results: Vec<TestResult>,
+    testcases: Vec<Box<dyn Test + Send + Sync>>,
+    pub testresults: Vec<TestResult>,
     binary: Binary,
     config: TestDefinition,
 }
@@ -36,8 +35,8 @@ impl TestcaseGenerator {
         Ok(TestcaseGenerator {
             config,
             binary,
-            test_cases: vec![],
-            test_results: vec![],
+            testcases: vec![],
+            testresults: vec![],
         })
     }
 
@@ -45,16 +44,11 @@ impl TestcaseGenerator {
         let mut n: i32 = 1;
         for tc in self.config.testcases.iter() {
             match tc.testcase_type.as_str() {
-                "UnitTest" => {
-                    let unit_test =
-                        UnitTest::from_saved_tc(n, tc, &self.config.project_definition, None).unwrap();
-                    self.test_cases.push(Box::new(unit_test));
-                }
                 "IO" => {
                     let io_test =
                         IoTest::from_saved_tc(n, tc, &self.config.project_definition, Some(&self.binary))
                         .unwrap();
-                    self.test_cases.push(Box::new(io_test));
+                    self.testcases.push(Box::new(io_test));
                 }
                 _ => {}
             }
@@ -69,8 +63,8 @@ impl TestcaseGenerator {
             return Err(GenerationError::CouldNotMakeBinary);
         }
 
-        self.test_results = self
-            .test_cases
+        self.testresults = self
+            .testcases
             .iter()
             .map(|tc| match tc.run() {
                 Ok(tr) => Some(tr),
@@ -87,12 +81,12 @@ impl TestcaseGenerator {
     }
 
     pub fn make_html_report(&self, compare_mode : &str, protected_mode : bool) -> Result<String, GenerationError> {
-        let tc_public_num = self.test_results.iter().filter(|test| !test.protected).collect::<Vec<&TestResult>>().len();
-        let tc_public_passed = self.test_results.iter().filter(|test| !test.protected && test.passed).collect::<Vec<&TestResult>>().len();
-        let tc_private_num = self.test_results.iter().filter(|test| test.protected).collect::<Vec<&TestResult>>().len();
-        let tc_private_passed = self.test_results.iter().filter(|test| test.protected && test.passed).collect::<Vec<&TestResult>>().len();
-        let tc_all_num = self.test_results.len();
-        let tc_all_passed = self.test_results.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
+        let tc_public_num = self.testresults.iter().filter(|test| !test.protected).collect::<Vec<&TestResult>>().len();
+        let tc_public_passed = self.testresults.iter().filter(|test| !test.protected && test.passed).collect::<Vec<&TestResult>>().len();
+        let tc_private_num = self.testresults.iter().filter(|test| test.protected).collect::<Vec<&TestResult>>().len();
+        let tc_private_passed = self.testresults.iter().filter(|test| test.protected && test.passed).collect::<Vec<&TestResult>>().len();
+        let tc_all_num = self.testresults.len();
+        let tc_all_passed = self.testresults.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
         let compiler_output = self.binary.info.errors.clone().unwrap_or(String::from("<i>failed fetching compiler output!</i>"));
 
         let result = html! {
@@ -347,7 +341,7 @@ impl TestcaseGenerator {
                                          : "Mem Analyzer Log"
                                      }
                                      |templ| {
-                                         for tc in self.test_results.iter() {
+                                         for tc in self.testresults.iter() {
                                              match tc.get_html_short(protected_mode) {
                                                  Ok(res)=> {
                                                      &mut *templ << Raw(res);
@@ -363,7 +357,7 @@ impl TestcaseGenerator {
                              h2 : "Testcases";
 
                                   |templ| {
-                                      for tc in self.test_results.iter() {
+                                      for tc in self.testresults.iter() {
                                           if !(protected_mode && tc.protected) {
                                               &mut *templ << Raw(tc.get_html_long(compare_mode, self.config.project_definition.ws_hints).unwrap_or(String::from("<div>Error</div>")));
                                           }
@@ -380,7 +374,7 @@ impl TestcaseGenerator {
     pub fn make_json_report(&self) -> Result<String, GenerationError> {
         let mut json: HashMap<String, serde_json::Value> = HashMap::new();
         let mut results: Vec<serde_json::Value> = vec![];
-        for tc in self.test_results.iter() {
+        for tc in self.testresults.iter() {
             results.push(tc.get_json()?);
         }
         json.insert(String::from("testcases"), serde_json::to_value(results).unwrap());

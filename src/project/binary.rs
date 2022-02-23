@@ -14,7 +14,6 @@ pub enum GenerationError {
     VgLogNotFound,
     VgLogParseError,
     CouldNotMakeBinary,
-    ConfigErrorUnit,
 }
 
 #[derive(Debug)]
@@ -148,7 +147,6 @@ impl std::fmt::Display for GenerationError {
                 GenerationError::VgLogNotFound => "VgLogNotFound".to_string(),
                 GenerationError::VgLogParseError => "VgLogParseError".to_string(),
                 GenerationError::CouldNotMakeBinary => "CouldNotMakeBinary".to_string(),
-                GenerationError::ConfigErrorUnit => "ConfigErrorUnit".to_string()
             }
         )
     }

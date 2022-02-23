@@ -12,7 +12,6 @@ use crate::project::binary::{Binary, GenerationError};
 
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum TestCaseKind {
-    UnitTest,
     IOTest,
 }
 

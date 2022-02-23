@@ -99,7 +99,7 @@ fn main() {
     match generator.run_generateables() {
         Ok(_) => {
             println!("\nDone testing");
-            println!("Passed testcases: {} / {}", generator.test_results.iter().filter(|test| test.passed).count(), generator.test_results.len());
+            println!("Passed testcases: {} / {}", generator.testresults.iter().filter(|test| test.passed).count(), generator.testresults.len());
         },
         Err(e) => eprintln!("Error running:\n{}", e),
     };
