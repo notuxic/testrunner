@@ -16,13 +16,11 @@ use crate::project::definition::ProjectDefinition;
 #[derive(Clone)]
 pub enum InputOutput {
     Input(String),
-    InputFlush(String),
     Output(String),
 }
 
 pub enum IODiff {
     Input(String),
-    InputFlush(String),
     Output(Changeset),
     OutputQuery(Changeset),
 }
@@ -31,7 +29,6 @@ impl InputOutput {
     fn is_input(&self) -> bool {
         match self {
             InputOutput::Input(_) => true,
-            InputOutput::InputFlush(_) => true,
             InputOutput::Output(_) => false,
         }
     }
@@ -39,7 +36,6 @@ impl InputOutput {
     fn is_output(&self) -> bool {
         match self {
             InputOutput::Input(_) => false,
-            InputOutput::InputFlush(_) => false,
             InputOutput::Output(_) => true,
         }
     }
@@ -47,7 +43,6 @@ impl InputOutput {
     fn unwrap(self) -> String {
         match self {
             InputOutput::Input(s) => s,
-            InputOutput::InputFlush(s) => s,
             InputOutput::Output(s) => s,
         }
     }
@@ -178,7 +173,6 @@ impl Test for OrdIoTest {
 
             match e.0 {
                 InputOutput::Input(input) => IODiff::Input(input.to_string()),
-                InputOutput::InputFlush(input) => IODiff::InputFlush(input.to_string()),
                 InputOutput::Output(output) => {
                     len_ref_sum += output.len();
                     len_user_sum += e.1.clone().unwrap().len();
@@ -205,7 +199,6 @@ impl Test for OrdIoTest {
         let input = self.io.iter().map(|e| {
             match e {
                 InputOutput::Input(input) => input.clone(),
-                InputOutput::InputFlush(input) => input.clone(),
                 _ => "".to_string(),
             }
         }).collect::<Vec<String>>().join("");
@@ -366,9 +359,6 @@ impl OrdIoTest {
                 else if e.starts_with("< ") {
                     curr_io = InputOutput::Input(format!("{}\n", e.strip_prefix("< ").unwrap()));
                 }
-                else if e.starts_with("! ") {
-                    curr_io = InputOutput::InputFlush(format!("{}", e.strip_prefix("! ").unwrap()));
-                }
                 else if e.starts_with("#") {
                     return acc;
                 }
@@ -394,9 +384,6 @@ impl OrdIoTest {
                             else {
                                 acc.push(curr_io);
                             }
-                        }
-                        InputOutput::InputFlush(_) => {
-                            acc.push(curr_io);
                         }
                     }
                 }
@@ -457,11 +444,6 @@ impl OrdIoTest {
             match &curr_io {
                 InputOutput::Input(input) => {
                     stdin.write(&input.as_bytes())?;
-                    stdin.flush()?;
-                },
-                InputOutput::InputFlush(input) => {
-                    stdin.write(&input.as_bytes())?;
-                    stdin.flush()?;
                     stdin.flush()?;
                 },
                 InputOutput::Output(_) => {
@@ -538,10 +520,9 @@ impl OrdIoTest {
             let given_retvar;
             let given_output;
 
-            let capture = cmd.communicate_start(None)
-                .limit_time(Duration::from_millis(250))
-                .read();
-
+            drop(stdin);
+            let capture = communicator.read();
+            std::thread::sleep(Duration::from_millis(25)); // workaround, there seems to be a race-condition in `subprocess`es code
             match capture {
                 Ok(c) => {
                     given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
