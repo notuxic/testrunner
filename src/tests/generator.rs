@@ -5,6 +5,7 @@ use super::test::Test;
 use super::testcase::TestDefinition;
 use super::testresult::TestResult;
 use super::io_test::IoTest;
+use super::ordio_test::OrdIoTest;
 use crate::project::binary::{Binary, GenerationError};
 
 #[allow(dead_code)]
@@ -45,10 +46,12 @@ impl TestcaseGenerator {
         for tc in self.config.testcases.iter() {
             match tc.testcase_type.as_str() {
                 "IO" => {
-                    let io_test =
-                        IoTest::from_saved_tc(n, tc, &self.config.project_definition, Some(&self.binary))
-                        .unwrap();
+                    let io_test = IoTest::from_saved_tc(n, tc, &self.config.project_definition, Some(&self.binary))?;
                     self.testcases.push(Box::new(io_test));
+                }
+                "OrdIO" => {
+                    let ordio_test = OrdIoTest::from_saved_tc(n, tc, &self.config.project_definition, Some(&self.binary))?;
+                    self.testcases.push(Box::new(ordio_test));
                 }
                 _ => {}
             }
@@ -58,24 +61,25 @@ impl TestcaseGenerator {
     }
 
     pub fn run_generateables(&mut self) -> Result<(), GenerationError> {
-        if !self.binary.compile().is_ok() {
-            println!("could not compile binary, no tests were run");
+        let compilation_result = self.binary.compile();
+        if !compilation_result.is_ok() {
+            eprintln!("Could not compile binary, no tests were run!");
+            eprintln!("{:?}", compilation_result.unwrap_err());
             return Err(GenerationError::CouldNotMakeBinary);
         }
 
-        self.testresults = self
-            .testcases
-            .iter()
-            .map(|tc| match tc.run() {
-                Ok(tr) => Some(tr),
+        self.testresults = self.testcases.iter().fold(Vec::<TestResult>::new(), |mut acc, tc| {
+            match tc.run() {
+                Ok(tr) => {
+                    acc.push(tr);
+                    acc
+                },
                 Err(e) => {
                     println!("Error running testcase: {}", e);
-                    None
-                }
-            })
-        .filter(|x| x.is_some())
-            .map(|x| x.unwrap())
-            .collect();
+                    acc
+                },
+            }
+        });
 
         return Ok(());
     }
@@ -216,6 +220,9 @@ impl TestcaseGenerator {
                             }}
                             #diff-remove {{
                                 background-color: IndianRed
+                            }}
+                            #diff-input {{
+                                text-decoration: underline
                             }}
                             .inline-code {{
                                 background: #eee;

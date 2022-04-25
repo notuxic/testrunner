@@ -1,6 +1,7 @@
 use std::fs::{copy, create_dir_all, Permissions, read_to_string, remove_file, set_permissions};
 use std::io;
 use std::io::Write;
+use std::process::Command;
 use std::time::Instant;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -13,6 +14,7 @@ use super::testresult::TestResult;
 use super::testcase::Testcase;
 use crate::project::binary::{Binary, GenerationError};
 use crate::project::definition::ProjectDefinition;
+
 
 #[allow(dead_code)]
 pub struct IoTest {
@@ -27,6 +29,7 @@ pub struct IoTest {
     env_vars: Option<String>,
 }
 
+
 impl Test for IoTest {
     fn get_test_meta(&self) -> &TestMeta { &self.meta }
 
@@ -38,78 +41,38 @@ impl Test for IoTest {
             println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
         }
 
-        let cmd_name = if self.meta.projdef.sudo.is_some() && cfg!(unix) {
-            String::from("sudo")
-        } else if self.meta.projdef.use_valgrind.unwrap_or(true) {
-            String::from("valgrind")
-        } else {
-            String::from(format!("./{}", &self.meta.projdef.binary_path))
-        };
-
-        let dir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
-        let vg_log_folder = self.meta.projdef.valgrind_log_folder.clone().unwrap_or(String::from("valgrind_logs"));
-        let vg_filepath = if cfg!(unix) && self.meta.projdef.sudo.is_some() {
-            format!("{}/testrunner-{}", std::env::temp_dir().to_str().unwrap(), Uuid::new_v4().to_simple().to_string())
-        } else {
-            format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, self.meta.number)
-        };
-
-        let mut flags = Vec::<String>::new();
-        if self.meta.projdef.sudo.is_some() {
-            flags.push(String::from("--preserve-env"));
-            flags.push(format!("--user={}", &self.meta.projdef.sudo.as_ref().unwrap()));
-            if self.meta.projdef.use_valgrind.unwrap_or(true) {
-                flags.push(String::from("valgrind"));
-            }
-        }
-        if self.meta.projdef.use_valgrind.unwrap_or(true) {
-            create_dir_all(format!("{}/{}/{}", &dir, &vg_log_folder, &self.meta.number)).expect("could not create valgrind_log folder");
-            #[cfg(unix)] {
-                set_permissions(format!("{}/{}", &dir, &vg_log_folder), Permissions::from_mode(0o750)).unwrap();
-                set_permissions(format!("{}/{}/{}", &dir, &vg_log_folder, &self.meta.number), Permissions::from_mode(0o750)).unwrap();
-            }
-
-            if let Some(v) = &self.meta.projdef.valgrind_flags {
-                flags.append(&mut v.clone());
-            }
-            else {
-                flags.push(String::from("--leak-check=full"));
-                flags.push(String::from("--show-leak-kinds=all"));
-                flags.push(String::from("--track-origins=yes"));
-            }
-            flags.push(format!("--log-file={}", &vg_filepath ));
-            flags.push(format!("./{}", &self.meta.projdef.binary_path));
-        }
-
-        let starttime = Instant::now();
+        let basedir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
+        let (vg_log_folder, vg_filepath) = prepare_valgrind(&self.meta, &basedir);
+        let (cmd_name, flags) = prepare_cmdline(&self.meta, &vg_filepath)?;
+        let env_vars = prepare_envvars(self.env_vars.as_ref());
 
         let global_timeout = self.meta.projdef.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, timeout);
+        let starttime = Instant::now();
+        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout);
+        let endtime = Instant::now();
 
         println!("Got output from testcase {}", self.meta.number);
 
         let had_timeout = !retvar.is_some();
 
-        if given_output.len() >= reference_output.len() * 2 {
-            let output_length = std::cmp::min( reference_output.len()  * 2 ,  given_output.len() );
-            given_output = given_output.chars().take(output_length).collect();
+        if given_output.len() > reference_output.len() * 2 {
             println!("Reducing your output length because its bigger than 2 * reference output");
+            given_output.truncate(reference_output.len() * 2);
         }
 
-
+        println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
         // make changeset
         let changeset = Changeset::new(&reference_output, &given_output, &self.meta.projdef.diff_delim);
 
         let distance = changeset.distance;
-        let status = retvar; // TODO refactor
         let add_diff = self.get_add_diff();
-        let passed: bool = self.exp_retvar.is_some() && status.is_some() && status.unwrap() == self.exp_retvar.unwrap()
+        let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
             && distance == 0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0, 0.0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
 
-        if self.meta.projdef.verbose && distance != 0
+        if self.meta.projdef.verbose && distance > 0
         {
             println!("Diff-Distance: {:?}", distance);
             println!("------ START Reference ------");
@@ -118,20 +81,16 @@ impl Test for IoTest {
             println!("------ START Yours ------");
             println!("Your Output:\n{:?}", given_output);
             println!("------ END Yours ------");
-        }
 
-        // prints diff with colors to terminal
-        // green = ok
-        // blue = reference (our solution)
-        // red = wrong (students solution) / too much
-
-        if changeset.distance > 0 &&  self.meta.projdef.verbose
-        {
+            // prints diff with colors to terminal
+            // green = ok
+            // blue = reference (our solution)
+            // red = wrong (students solution) / too much
             let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
 
             for c in &changeset.diffs
             {
-                match *c
+                match c
                 {
                     Difference::Same(ref z)=>
                     {
@@ -156,14 +115,14 @@ impl Test for IoTest {
         }
 
         if cfg!(unix) && self.meta.projdef.sudo.is_some() {
-            copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number)).unwrap();
-            remove_file(&vg_filepath).unwrap_or(());
+            match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
+                Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
+                Err(_) => (),
+            }
         }
-        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &dir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
+        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
         println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
-        let endtime = Instant::now();
-        println!("Testcase took {:?}", endtime.duration_since(starttime));
         if self.meta.projdef.protected_mode && self.meta.protected {
             println!("Finished testcase {}: ********", self.meta.number);
         }
@@ -174,18 +133,19 @@ impl Test for IoTest {
 
         Ok(TestResult {
             diff: Some(changeset),
+            io_diff: None,
             add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
             implemented: None,
             passed,
-            result: given_output.clone(),
-            ret: status,
+            output: given_output.clone(),
+            ret: retvar,
             exp_ret: self.exp_retvar,
             mem_leaks: valgrind.0,
             mem_errors: valgrind.1,
             mem_logfile: vg_filepath,
             command_used: String::from(format!("./{} {}", &self.meta.projdef.binary_path, &self.argv.clone().join(" "))),
-            used_input: input,
+            input,
             timeout: had_timeout,
             name: self.meta.name.clone(),
             description: self.meta.desc.clone().unwrap_or(String::from("")),
@@ -249,50 +209,20 @@ impl Test for IoTest {
                 .as_ref()
                 .unwrap_or(&String::new())
                 .clone(),
-                exp_string: testcase
-                    .exp_string
-                    .as_ref()
-                    .unwrap_or(&String::new())
-                    .clone(),
-                    env_vars: testcase.env_vars.clone(),
+            exp_string: testcase
+                .exp_string
+                .as_ref()
+                .unwrap_or(&String::new())
+                .clone(),
+            env_vars: testcase.env_vars.clone(),
         };
 
         Ok(retvar)
     }
 }
 
-pub fn percentage_from_levenstein(steps: i32, source_len: usize, target_len: usize) -> f32 {
-    if (source_len == 0) || (target_len == 0) {
-        return 0.0;
-    } else {
-        return 1.0 - ((steps as f32) / (source_len as f32).max(target_len as f32));
-    }
-}
-
-pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
-    let re = Regex::new(r"(?s)in use at exit: [0-9,]+ bytes? in (?P<leaks>[0-9,]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9,]+) errors? from [0-9,]+ contexts?")
-        .unwrap();
-    let mut retvar = (-1, 1);
-    match read_to_string(filepath) {
-        Ok(content) => match re.captures_iter(&content).last() {
-            Some(cap) => {
-                retvar.0 = cap["leaks"].replace(",", "").parse().unwrap_or(-1);
-                retvar.1 = cap["errors"].replace(",", "").parse().unwrap_or(-1);
-                return Ok(retvar);
-            }
-            None => {
-                return Err(GenerationError::VgLogParseError);
-            }
-        },
-        Err(err) => {
-            println!("Cannot open valgrind log: {}\n{}", filepath, err);
-            return Err(GenerationError::VgLogNotFound);
-        }
-    }
-}
-
 impl IoTest {
-    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>,  timeout : u64) -> (String, String, String, Option<i32>) {
+    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout : u64) -> (String, String, String, Option<i32>) {
 
         let mut input: String = String::new();
         if !self.in_file.is_empty() {
@@ -301,10 +231,11 @@ impl IoTest {
                     input.clone_from(&content);
                 }
                 Err(err) => {
-                    println!("Cannot open stdinfile, fallback to none \n{:?}", err);
+                    eprintln!("Cannot open stdinfile, fallback to none \n{:?}", err);
                 }
             }
-        } else if !self.in_string.is_empty() {
+        }
+        else if !self.in_string.is_empty() {
             input.clone_from(&self.in_string);
         }
 
@@ -315,53 +246,22 @@ impl IoTest {
                     reference_output = content;
                 }
                 Err(err) => {
-                    println!("Cannot open stdout, fallback to none \n{:?}", err);
+                    eprintln!("Cannot open stdout, fallback to none \n{:?}", err);
                 }
             }
-        } else if !self.exp_string.is_empty() {
-            reference_output = self.exp_string.clone();
+        }
+        else if !self.exp_string.is_empty() {
+            reference_output.clone_from(&self.exp_string);
         }
 
-
-        let envs: Vec<(String, String)> = match &self.env_vars {
-            Some(var_string) => {
-                let mut splits: Vec<(String, String)> = Vec::new();
-                for split in var_string.split(",") {
-                    if split.contains("=") {
-                        let mut m = split.splitn(2, "=");
-                        splits.push((
-                                m.next().unwrap().clone().to_string(),
-                                m.next().unwrap().clone().to_string(),
-                        ));
-                    } else {
-                        splits.push((String::from(split), String::new()));
-                    }
-                }
-                splits
-            }
-            None => Vec::new(),
-        };
-
-
-        let mut command_with_args = String::from(format!("{:?}", command));
-        for elem in args.iter() {
-            if !elem.is_empty() {
-                command_with_args.push_str(&format!(" {:?} ", elem));
-            }
-        }
-        for elem in self.argv.iter() {
-            if !elem.is_empty() {
-                command_with_args.push_str(&format!(" {:?} ", elem));
-            }
-        }
-
-        let mut cmd = subprocess::Exec::shell(command_with_args)
-            //.args(args)
+        let mut cmd = subprocess::Exec::cmd(command)
             .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
+            .args(args)
+            .args(&self.argv)
             .stdin(subprocess::Redirection::Pipe)
             .stdout(subprocess::Redirection::Pipe)
             .stderr(subprocess::NullFile)
-            .env_extend(&envs)
+            .env_extend(envs)
             .popen()
             .expect("Could not spawn process!");
 
@@ -424,3 +324,119 @@ impl IoTest {
         return (input, reference_output, given_output, given_retvar);
     }
 }
+
+pub fn prepare_valgrind(meta: &TestMeta, basedir: &str) -> (String, String) {
+    let vg_log_folder = meta.projdef.valgrind_log_folder.clone().unwrap_or(String::from("valgrind_logs"));
+    let vg_filepath = if cfg!(unix) && meta.projdef.sudo.is_some() {
+        format!("{}/testrunner-{}", std::env::temp_dir().to_str().unwrap(), Uuid::new_v4().to_simple().to_string())
+    } else {
+        format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, meta.number)
+    };
+
+    if meta.projdef.use_valgrind.unwrap_or(true) {
+        create_dir_all(format!("{}/{}/{}", &basedir, &vg_log_folder, &meta.number)).expect("could not create valgrind_log folder");
+        #[cfg(unix)] {
+            set_permissions(format!("{}/{}", &basedir, &vg_log_folder), Permissions::from_mode(0o750)).unwrap();
+            set_permissions(format!("{}/{}/{}", &basedir, &vg_log_folder, &meta.number), Permissions::from_mode(0o750)).unwrap();
+        }
+    }
+
+    (vg_log_folder, vg_filepath)
+}
+
+pub fn prepare_cmdline(meta: &TestMeta, vg_filepath: &str) -> Result<(String, Vec<String>), GenerationError> {
+    let cmd_name = if meta.projdef.sudo.is_some() && cfg!(unix) {
+        String::from("sudo")
+    } else if meta.projdef.use_valgrind.unwrap_or(true) {
+        String::from("valgrind")
+    } else {
+        String::from(format!("./{}", &meta.projdef.binary_path))
+    };
+
+    let mut flags = Vec::<String>::new();
+    if meta.projdef.sudo.is_some() {
+        check_program_availability("sudo")?;
+        flags.push(String::from("--preserve-env"));
+        flags.push(format!("--user={}", &meta.projdef.sudo.as_ref().unwrap()));
+        if meta.projdef.use_valgrind.unwrap_or(true) {
+            flags.push(String::from("valgrind"));
+        }
+    }
+    if meta.projdef.use_valgrind.unwrap_or(true) {
+        check_program_availability("valgrind")?;
+        if let Some(v) = &meta.projdef.valgrind_flags {
+            flags.append(&mut v.clone());
+        }
+        else {
+            flags.push(String::from("--leak-check=full"));
+            flags.push(String::from("--show-leak-kinds=all"));
+            flags.push(String::from("--track-origins=yes"));
+        }
+        flags.push(format!("--log-file={}", &vg_filepath ));
+        flags.push(format!("./{}", &meta.projdef.binary_path));
+    }
+
+    Ok((cmd_name, flags))
+}
+
+pub fn prepare_envvars(env_vars: Option<&String>) -> Vec<(String, String)> {
+    match env_vars {
+        Some(var_string) => {
+            let mut splits: Vec<(String, String)> = Vec::new();
+            for split in var_string.split(",") {
+                if split.contains("=") {
+                    let mut m = split.splitn(2, "=");
+                    splits.push((
+                            m.next().unwrap().clone().to_string(),
+                            m.next().unwrap().clone().to_string(),
+                    ));
+                } else {
+                    splits.push((String::from(split), String::new()));
+                }
+            }
+            splits
+        }
+        None => Vec::new(),
+    }
+}
+
+pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
+    let re = Regex::new(r"(?s)in use at exit: [0-9,]+ bytes? in (?P<leaks>[0-9,]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9,]+) errors? from [0-9,]+ contexts?")
+        .unwrap();
+    let mut retvar = (-1, 1);
+    match read_to_string(filepath) {
+        Ok(content) => match re.captures_iter(&content).last() {
+            Some(cap) => {
+                retvar.0 = cap["leaks"].replace(",", "").parse().unwrap_or(-1);
+                retvar.1 = cap["errors"].replace(",", "").parse().unwrap_or(-1);
+                return Ok(retvar);
+            }
+            None => {
+                return Err(GenerationError::VgLogParseError);
+            }
+        },
+        Err(err) => {
+            eprintln!("Cannot open valgrind log: {}\n{}", filepath, err);
+            return Err(GenerationError::VgLogNotFound);
+        }
+    }
+}
+
+pub fn check_program_availability(prog: &str) -> Result<(), GenerationError> {
+    match Command::new(prog).spawn() {
+        Ok(mut child) => {
+            child.kill().map_err(|_| ());
+            Ok(())
+        },
+        Err(_) => Err(GenerationError::MissingCLIDependency(prog.to_string()))
+    }
+}
+
+pub fn percentage_from_levenstein(steps: i32, source_len: usize, target_len: usize) -> f32 {
+    if (source_len == 0) || (target_len == 0) {
+        return 0.0;
+    } else {
+        return 1.0 - ((steps as f32) / (source_len as f32).max(target_len as f32));
+    }
+}
+

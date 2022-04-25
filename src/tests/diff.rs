@@ -1,10 +1,10 @@
 use difference::{Changeset, Difference};
 use horrorshow::Raw;
 use regex::Regex;
+use super::ordio_test::IODiff;
 use super::testresult::HTMLError;
 
 fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) -> String {
-    // let hexdata: Vec<u8> = hex_to_u8(hexdata);
     let decdata: Vec<u8> = decdata.split(' ').map(|c| c.parse::<u8>().unwrap()).collect();
     let mut hexdump = String::with_capacity(81);
     for chunk in decdata.chunks(16) {
@@ -165,6 +165,106 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
                                         diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
                                     }
                                 }
+                            }
+                        }
+
+                        if with_ws_hints {
+                            diffright = diffright.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
+                            diffleft = diffleft.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
+                        }
+                        else {
+                            diffright = diffright.replace("\n", "<br />").replace("\0", "<br />");
+                            diffleft = diffleft.replace("\n", "<br />").replace("\0", "<br />");
+                        }
+
+                        &mut *templ << Raw(format!("<tr><th>Reference {}</th><th>Your {}</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", source_name, source_name, diffright, diffleft));
+                    }
+                }
+            }
+    });
+    Ok(String::from(retvar))
+}
+
+pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, HTMLError> {
+    let line_end = if compare_mode == "\n" { "\n" } else { "" };
+
+    let retvar = format!(
+        "{}",
+        box_html! {
+            div(id="diff") {
+                table(id="differences") {
+                    |templ| {
+                        let mut diffright = String::new();
+                        let mut diffleft = String::new();
+
+                        let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
+
+                        for io_diff in changes {
+                            match io_diff {
+                                IODiff::Input(input) => {
+                                    if with_ws_hints {
+                                        diffright.push_str(&format!("<span id=\"diff-input\">{}</span><span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                &input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffleft.push_str(&format!("<span id=\"diff-input\">{}</span><span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                &input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                    }
+                                    else {
+                                        diffright.push_str(&format!("{}{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffleft.push_str(&format!("{}{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                    }
+                                },
+                                IODiff::InputFlush(input) => {
+                                    if with_ws_hints {
+                                        diffright.push_str(&format!("<span id=\"diff-input\">{}</span><span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                &input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffleft.push_str(&format!("<span id=\"diff-input\">{}</span><span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                &input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                    }
+                                    else {
+                                        diffright.push_str(&format!("{}{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffleft.push_str(&format!("{}{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                    }
+                                },
+                                IODiff::Output(changeset) => {
+                                    for c in &changeset.diffs {
+                                        match *c {
+                                            Difference::Same(ref z)=>
+                                            {
+                                                if with_ws_hints {
+                                                    diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                &z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                    diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                &z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                }
+                                                else {
+                                                    diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                    diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                }
+                                            }
+                                            Difference::Rem(ref z) =>
+                                            {
+                                                if with_ws_hints {
+                                                    diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                                            re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                }
+                                                else {
+                                                    diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                }
+                                            }
+
+                                            Difference::Add(ref z) =>
+                                            {
+                                                if with_ws_hints {
+                                                    diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                                            re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                }
+                                                else {
+                                                    diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
                             }
                         }
 

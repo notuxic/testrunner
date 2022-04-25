@@ -14,6 +14,8 @@ pub enum GenerationError {
     VgLogNotFound,
     VgLogParseError,
     CouldNotMakeBinary,
+    MissingCLIDependency(String),
+    IOMismatch,
 }
 
 #[derive(Debug)]
@@ -77,7 +79,7 @@ impl Binary {
 
     pub fn compile_with_make(&mut self) -> Result<(), CompileError> {
         let makefile_path = match &self.project_definition.makefile_path {
-            Some(mk_path) => if Path::new(&mk_path).is_file() {
+            Some(mk_path) => if Path::new(&format!("{}/Makefile", &mk_path)).is_file() {
                     mk_path.clone()
                 }
                 else {
@@ -92,11 +94,7 @@ impl Binary {
         make_cmd.current_dir(makefile_path);
         make_cmd.stderr(Stdio::piped());
         make_cmd.stdout(Stdio::piped());
-        make_cmd.args(self.project_definition
-            .make_targets
-            .clone()
-            .unwrap_or(vec![]),
-        );
+        make_cmd.args(self.project_definition.make_targets.clone().unwrap_or(vec![]));
 
         match make_cmd.output() {
             Ok(res) => {
@@ -147,6 +145,8 @@ impl std::fmt::Display for GenerationError {
                 GenerationError::VgLogNotFound => "VgLogNotFound".to_string(),
                 GenerationError::VgLogParseError => "VgLogParseError".to_string(),
                 GenerationError::CouldNotMakeBinary => "CouldNotMakeBinary".to_string(),
+                GenerationError::MissingCLIDependency(dep) => format!("MissingCLIDependency({})", &dep),
+                GenerationError::IOMismatch => "IOMismatch".to_string(),
             }
         )
     }

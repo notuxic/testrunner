@@ -3,7 +3,8 @@ use horrorshow::Raw;
 use regex::Regex;
 use serde_derive::Serialize;
 use serde_json::json;
-use super::diff::changeset_to_html;
+use super::diff::{changeset_to_html, iodiff_to_html};
+use super::ordio_test::IODiff;
 use super::test::TestCaseKind;
 use crate::project::binary::GenerationError;
 
@@ -18,23 +19,23 @@ pub struct TestResult {
     pub kind: TestCaseKind,
     #[serde(skip)]
     pub diff: Option<Changeset>,
-    //#[serde(skip)]
-    //diff: Option<Vec<diff::Result<String>>>,
     #[serde(skip)]
     pub add_diff: Option<String>,
+    #[serde(skip)]
+    pub io_diff: Option<Vec<IODiff>>,
     pub distance_percentage: Option<f32>,
     pub add_distance_percentage: Option<f32>,
     pub mem_leaks: i32,
     pub mem_errors: i32,
     pub mem_logfile: String,
     pub command_used: String,
-    pub used_input: String,
+    pub input: String,
     pub timeout: bool,
     pub ret: Option<i32>,
     pub exp_ret: Option<i32>,
     pub passed: bool,
     pub implemented: Option<bool>,
-    pub result: String, // thought about any type?
+    pub output: String, // thought about any type?
     pub name: String,
     pub description: String,
     pub number: i32,
@@ -55,7 +56,7 @@ impl TestResult {
             "mem_leaks": self.mem_leaks,
             "mem_errors": self.mem_errors,
             "timeout": self.timeout,
-            "result": self.result.clone(),
+            "output": self.output.clone(),
             "protected" : self.protected,
         }))
     }
@@ -134,6 +135,12 @@ impl TestResult {
                         }
                     }
 
+                    @ if self.io_diff.is_some() {
+                        |templ| {
+                            &mut *templ << Raw(iodiff_to_html(&self.io_diff.as_ref().unwrap(), compare_mode, with_ws_hints, "Output").unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
+                        }
+                    }
+
                     @ if self.add_diff.is_some() {
                         |templ| {
                             &mut *templ << Raw(self.add_diff.clone().unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
@@ -150,13 +157,13 @@ impl TestResult {
                                                 let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
                                                 if with_ws_hints {
                                                     &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                            re.replace_all(&self.used_input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
+                                                            re.replace_all(&self.input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
                                                             .replace("\n", "&#x21b5;<br />")
                                                             .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
                                                 }
                                                 else {
                                                     &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                            self.used_input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")));
+                                                            self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")));
                                                 }
                                             }
                                         }

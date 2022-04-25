@@ -73,7 +73,7 @@ fn main() {
 
 
     let config = read_to_string(cli_args.value_of("config").unwrap())
-        .expect(&format!("Cannot open or read config file {}", cli_args.value_of("config").unwrap()));
+        .expect(&format!("Cannot open or read config file: {}", cli_args.value_of("config").unwrap()));
     let diff_delim = match cli_args.value_of("diff_mode").unwrap() {
         "char" => "",
         "c" => "",
