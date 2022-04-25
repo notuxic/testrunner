@@ -1,4 +1,4 @@
-use std::fs::{copy, create_dir_all, Permissions, read_to_string, remove_file, set_permissions};
+use std::fs::{copy, create_dir_all, Permissions, read_to_string, remove_dir_all, remove_file, set_permissions};
 use std::io;
 use std::io::Write;
 use std::process::Command;
@@ -122,6 +122,11 @@ impl Test for IoTest {
         }
         let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
         println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
+
+        if cfg!(unix) && self.meta.projdef.sudo.is_some() && self.meta.protected {
+            remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or(());
+        }
+        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number);
 
         if self.meta.projdef.protected_mode && self.meta.protected {
             println!("Finished testcase {}: ********", self.meta.number);

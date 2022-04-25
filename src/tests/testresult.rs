@@ -61,7 +61,7 @@ impl TestResult {
         }))
     }
 
-    pub fn get_html_long(&self, compare_mode : &str, with_ws_hints: bool) -> Result<String, GenerationError> {
+    pub fn get_html_long(&self, protected_mode: bool, compare_mode: &str, with_ws_hints: bool) -> Result<String, GenerationError> {
         let retvar = box_html! {
             div(id="long_report") {
                 div(id = "title") {
@@ -124,7 +124,12 @@ impl TestResult {
 
                         tr {
                             th {:"Memory Usage-Errors / Leaks"}
-                            td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.mem_errors, self.mem_leaks, self.mem_logfile))}
+                            @ if protected_mode && self.protected {
+                                td {:Raw(format!("{} / {}", self.mem_errors, self.mem_leaks))}
+                            }
+                            else {
+                                td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.mem_errors, self.mem_leaks, self.mem_logfile))}
+                            }
                         }
                     }
 
@@ -142,7 +147,7 @@ impl TestResult {
                     }
 
                     @ if self.add_diff.is_some() {
-                        |templ| {
+                       |templ| {
                             &mut *templ << Raw(self.add_diff.clone().unwrap_or(String::from(r"<div>Error cannot get changelist</div>")));
                         }
                     }
@@ -158,13 +163,13 @@ impl TestResult {
                                                     let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
                                                     if with_ws_hints {
                                                         &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                                re.replace_all(&self.input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
+                                                                re.replace_all(&self.input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>")
                                                                 .replace("\n", "&#x21b5;<br />")
                                                                 .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
                                                     }
                                                     else {
                                                         &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                                self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")));
+                                                                self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
                                                     }
                                                 }
                                             }
@@ -180,7 +185,13 @@ impl TestResult {
 
     pub fn get_html_short(&self, protected_mode : bool) -> Result<String, GenerationError> {
         let name = self.name.replace("\"", "");
-        let distance = (self.distance_percentage.unwrap_or(1.0) + self.add_distance_percentage.unwrap_or(1.0)) / 2.0;
+        let distance = if self.add_distance_percentage.is_some() {
+            (self.distance_percentage.unwrap_or(-1.0) + self.add_distance_percentage.unwrap_or(-1.0)) / 2.0
+        }
+        else {
+            self.distance_percentage.unwrap_or(-1.0)
+        };
+
         let retvar = box_html! {
             tr{
                 td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=\"#tc-{}\">#{:0>2}:&nbsp;{}</a>", &self.number, &self.number, &name)) }}
@@ -189,7 +200,7 @@ impl TestResult {
                 td{:format!("{}", if self.timeout { "yes" } else { "no" })}
                 td{:format!("{}", self.mem_errors)}
                 td{:format!("{}", self.mem_leaks)}
-                td{@ if self.mem_logfile.is_empty() { : ""} else { : Raw(format!("<a target=\"_blank\" href=\"{}\">Open</a>", &self.mem_logfile ))  } }
+                td{@ if self.mem_logfile.is_empty() || (protected_mode && self.protected) { : ""} else { : Raw(format!("<a target=\"_blank\" href=\"{}\">Open</a>", &self.mem_logfile ))  } }
             }
         };
         Ok(String::from(format!("{}", retvar)))

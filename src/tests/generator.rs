@@ -356,7 +356,7 @@ impl TestcaseGenerator {
                                                      &mut *templ << Raw(res);
                                                  }
                                                  Err(_err) => {
-                                                     &mut *templ << Raw(String::from("<th></th><th></th><th></th><th></th><th></th><th></th><th></th>"))
+                                                     &mut *templ << Raw(String::from("<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"))
                                                  }
                                              }
                                          }
@@ -368,7 +368,7 @@ impl TestcaseGenerator {
                                   |templ| {
                                       for tc in self.testresults.iter() {
                                           if !(protected_mode && tc.protected) {
-                                              &mut *templ << Raw(tc.get_html_long(compare_mode, self.config.project_definition.ws_hints).unwrap_or(String::from("<div>Error</div>")));
+                                              &mut *templ << Raw(tc.get_html_long(protected_mode, compare_mode, self.config.project_definition.ws_hints).unwrap_or(String::from("<div>Error</div>")));
                                           }
                                       }
                                   }

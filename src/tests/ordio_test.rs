@@ -1,5 +1,5 @@
 use std::clone::Clone;
-use std::fs::{copy, File, remove_file};
+use std::fs::{copy, File, remove_dir_all, remove_file};
 use std::io::{self, BufRead, BufReader, Write};
 use std::time::{Duration, Instant};
 use difference::{Changeset, Difference};
@@ -305,6 +305,11 @@ impl Test for OrdIoTest {
         let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
         println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
+        if cfg!(unix) && self.meta.projdef.sudo.is_some() && self.meta.protected {
+            remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or(());
+        }
+        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number);
+
         if self.meta.projdef.protected_mode && self.meta.protected {
             println!("Finished testcase {}: ********", self.meta.number);
         }
@@ -433,11 +438,9 @@ impl OrdIoTest {
         if curr_io.clone().unwrap().is_empty() {
             match communicator.read() {
                 Ok(comm) => {
-                    // println!("Got early Output:\n{}", &String::from_utf8_lossy(&comm.0.clone().unwrap_or(vec![])));
                     io.push(InputOutput::Output(String::from_utf8_lossy(&comm.0.unwrap_or(vec![])).to_string()));
                 },
                 Err(err) => {
-                    // println!("Got early Output:\n{}", &String::from_utf8_lossy(&err.capture.0.clone().unwrap_or(vec![])));
                     io.push(InputOutput::Output(String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])).to_string()));
                 }
             }
@@ -453,13 +456,11 @@ impl OrdIoTest {
                 InputOutput::Input(input) => {
                     stdin.write(&input.as_bytes())?;
                     stdin.flush()?;
-                    // println!("Sending Input:\n{}", &input);
                 },
                 InputOutput::InputFlush(input) => {
                     stdin.write(&input.as_bytes())?;
                     stdin.flush()?;
                     stdin.flush()?;
-                    // println!("Sending flushed Input:\n{}", &input);
                 },
                 InputOutput::Output(_) => {
                     let mut output;
@@ -468,12 +469,10 @@ impl OrdIoTest {
 
                         match communicator.read() {
                             Ok(comm) => {
-                                // println!("Got Ok Output:\n{}", &String::from_utf8_lossy(&comm.0.clone().unwrap_or(vec![])));
                                 output.push_str(&String::from_utf8_lossy(&comm.0.unwrap_or(vec![])));
                             },
                             Err(err) => {
                                 if err.kind() == io::ErrorKind::TimedOut {
-                                    // println!("Got Err Output:\n{}", &String::from_utf8_lossy(&err.capture.0.clone().unwrap_or(vec![])));
                                     output.push_str(&String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])));
                                 }
                                 else {
@@ -482,9 +481,32 @@ impl OrdIoTest {
                             }
                         }
 
-                        let currtime = Instant::now();
                         retvar = cmd.poll();
-                        if currtime - starttime > timeout || retvar.is_some() {
+                        if retvar.is_some() {
+                            io.push(InputOutput::Output(output));
+                            has_finished = true;
+                            break 'io_loop;
+                        }
+
+                        let currtime = Instant::now();
+                        if currtime - starttime > timeout {
+                            println!("Testcase {} ran into a timeout!", self.meta.number);
+                            let given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
+                                Some(retvar) => Some(retvar),
+                                None => {
+                                    println!("Testcase {} is still running, killing testcase!", self.meta.number);
+                                    cmd.kill().expect("Could not kill testcase!");
+                                    if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
+                                        println!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
+                                    }
+                                    None
+                                }
+                            };
+                            if retvar.is_none() {
+                                retvar = given_retvar;
+                            }
+
+                            println!("Possibly failed capturing some/all output!");
                             io.push(InputOutput::Output(output));
                             has_finished = true;
                             break 'io_loop;
@@ -531,7 +553,6 @@ impl OrdIoTest {
                     };
 
                     given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
-                    // println!("Got final output: {}", given_output);
                 }
 
                 Err(e) => {
@@ -553,7 +574,6 @@ impl OrdIoTest {
 
                     println!("Possibly failed capturing some/all output!");
                     given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
-                    // println!("Got final output: {}", given_output);
                 }
             }
 
