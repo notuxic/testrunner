@@ -1,9 +1,8 @@
 use std::clone::Clone;
 use std::fs::{copy, File, remove_file};
-use std::io::{BufRead, BufReader, Read, self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::time::{Duration, Instant};
 use difference::{Changeset, Difference};
-use popol::{Events, Sources};
 use regex::Regex;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, parse_vg_log, percentage_from_levenstein};
@@ -25,6 +24,7 @@ pub enum IODiff {
     Input(String),
     InputFlush(String),
     Output(Changeset),
+    OutputQuery(Changeset),
 }
 
 impl InputOutput {
@@ -92,7 +92,7 @@ impl Test for OrdIoTest {
             None => DiffKind::PlainText,
         };
         let meta = TestMeta {
-            kind: TestCaseKind::IOTest,
+            kind: TestCaseKind::OrdIOTest,
             add_diff_kind,
             add_out_file: testcase.add_out_file.clone(),
             add_exp_file: testcase.add_exp_file.clone(),
@@ -112,7 +112,7 @@ impl Test for OrdIoTest {
             env_vars: testcase.env_vars.clone(),
             io_file: testcase.io_file.as_ref().unwrap_or(&String::new()).clone(),
             io: OrdIoTest::parse_io_file(testcase.io_file.as_ref().unwrap())?,
-            io_prompt: Regex::new(testcase.io_prompt.as_ref().unwrap()).unwrap(),
+            io_prompt: Regex::new(&format!("(?m){}", testcase.io_prompt.as_ref().unwrap())).unwrap(),
         };
         Ok(test)
     }
@@ -172,7 +172,9 @@ impl Test for OrdIoTest {
         let mut distances = Vec::with_capacity(io.len() / 2 + 2);
         let mut io_mismatch = false;
         let io_diff: Vec<IODiff> = self.io.iter().zip(io.iter()).map(|e| {
-            io_mismatch = true;
+            if !((e.0.is_input() && e.1.is_input()) || (e.0.is_output() && e.1.is_output())) {
+                io_mismatch = true;
+            }
 
             match e.0 {
                 InputOutput::Input(input) => IODiff::Input(input.to_string()),
@@ -182,7 +184,12 @@ impl Test for OrdIoTest {
                     len_user_sum += e.1.clone().unwrap().len();
                     let changeset = Changeset::new(output, &e.1.clone().unwrap(), &self.meta.projdef.diff_delim);
                     distances.push(changeset.distance.abs() * output.len() as i32);
-                    IODiff::Output(changeset)
+                    if output.chars().last().unwrap() == '\n' {
+                        IODiff::Output(changeset)
+                    }
+                    else {
+                        IODiff::OutputQuery(changeset)
+                    }
                 }
             }
         }).collect();
@@ -234,6 +241,31 @@ impl Test for OrdIoTest {
             io_diff.iter().for_each(|e| {
                 match e {
                     IODiff::Output(cs) => {
+                        for c in &cs.diffs
+                        {
+                            match c
+                            {
+                                Difference::Same(ref z)=>
+                                {
+                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z) ).unwrap();
+                                }
+                                Difference::Rem(ref z) =>
+                                {
+                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                                }
+
+                                Difference::Add(ref z) =>
+                                {
+                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                                }
+
+                            }
+                        }
+                    },
+                    IODiff::OutputQuery(cs) => {
                         for c in &cs.diffs
                         {
                             match c
@@ -321,22 +353,16 @@ impl OrdIoTest {
                 let curr_io: InputOutput;
 
                 if e.starts_with("> ") {
-                    e.strip_prefix("> ").unwrap();
-                    e.push('\n');
-                    curr_io = InputOutput::Output(e);
+                    curr_io = InputOutput::Output(format!("{}\n", e.strip_prefix("> ").unwrap()));
                 }
                 else if e.starts_with("? ") {
-                    e.strip_prefix("? ").unwrap();
-                    curr_io = InputOutput::Output(e);
+                    curr_io = InputOutput::Output(format!("{}", e.strip_prefix("? ").unwrap()));
                 }
                 else if e.starts_with("< ") {
-                    e.strip_prefix("< ").unwrap();
-                    e.push('\n');
-                    curr_io = InputOutput::Input(e);
+                    curr_io = InputOutput::Input(format!("{}\n", e.strip_prefix("< ").unwrap()));
                 }
                 else if e.starts_with("! ") {
-                    e.strip_prefix("! ").unwrap();
-                    curr_io = InputOutput::InputFlush(e);
+                    curr_io = InputOutput::InputFlush(format!("{}", e.strip_prefix("! ").unwrap()));
                 }
                 else if e.starts_with("#") {
                     return acc;
@@ -382,12 +408,9 @@ impl OrdIoTest {
 
     fn run_command_with_timeout(&self, command: &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout: u64)-> Result<(Vec<InputOutput>, Option<i32>), io::Error> {
         let timeout = Duration::from_secs(timeout);
-        let mut got_timeout = false;
+        let mut has_finished = false;
         let mut ref_io = self.io.iter();
         let mut io: Vec<InputOutput> = Vec::with_capacity(self.io.len());
-
-        let mut sources = Sources::with_capacity(1);
-        let mut events = Events::new();
 
         let mut cmd = subprocess::Exec::cmd(command)
             .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
@@ -401,27 +424,22 @@ impl OrdIoTest {
             .expect("Could not spawn process!");
 
         let mut stdin = cmd.stdin.as_ref().unwrap().try_clone().unwrap();
-        let mut stdout = cmd.stdout.as_ref().unwrap().try_clone().unwrap();
         let mut curr_io = ref_io.next().unwrap().clone();
 
-        sources.register((), &cmd.stdout.as_ref().unwrap().try_clone().unwrap(), popol::interest::READ);
+        let mut communicator = cmd.communicate_start(Some("".as_bytes().iter().cloned().collect()))
+            .limit_time(Duration::from_millis(250));
 
         // check for some initial unexpected output
         if curr_io.clone().unwrap().is_empty() {
-            match sources.wait_timeout(&mut events, Duration::from_millis(250)) {
-                Ok(()) => {
-                    let mut buffer = [0; 1024];
-                    stdout.read(&mut buffer[..])?;
-                    io.push(InputOutput::Output(String::from_utf8_lossy(&buffer).to_string()));
+            match communicator.read() {
+                Ok(comm) => {
+                    // println!("Got early Output:\n{}", &String::from_utf8_lossy(&comm.0.clone().unwrap_or(vec![])));
+                    io.push(InputOutput::Output(String::from_utf8_lossy(&comm.0.unwrap_or(vec![])).to_string()));
                 },
                 Err(err) => {
-                    if err.kind() == io::ErrorKind::TimedOut {
-                        io.push(InputOutput::Output("".to_string()));
-                    }
-                    else {
-                        return Err(err)
-                    }
-                },
+                    // println!("Got early Output:\n{}", &String::from_utf8_lossy(&err.capture.0.clone().unwrap_or(vec![])));
+                    io.push(InputOutput::Output(String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])).to_string()));
+                }
             }
             curr_io = ref_io.next().unwrap().clone();
         }
@@ -429,48 +447,46 @@ impl OrdIoTest {
         let starttime = Instant::now();
 
         // continiously write input and read output
+        let mut retvar = None;
         'io_loop: loop {
             match &curr_io {
                 InputOutput::Input(input) => {
                     stdin.write(&input.as_bytes())?;
                     stdin.flush()?;
+                    // println!("Sending Input:\n{}", &input);
                 },
                 InputOutput::InputFlush(input) => {
                     stdin.write(&input.as_bytes())?;
                     stdin.flush()?;
                     stdin.flush()?;
+                    // println!("Sending flushed Input:\n{}", &input);
                 },
                 InputOutput::Output(_) => {
                     let mut output;
                     loop {
                         output = String::from("");
-                        match sources.wait_timeout(&mut events, Duration::from_millis(250)) {
-                            Ok(()) => {
-                                {}
+
+                        match communicator.read() {
+                            Ok(comm) => {
+                                // println!("Got Ok Output:\n{}", &String::from_utf8_lossy(&comm.0.clone().unwrap_or(vec![])));
+                                output.push_str(&String::from_utf8_lossy(&comm.0.unwrap_or(vec![])));
                             },
                             Err(err) => {
-                                if err.kind() != io::ErrorKind::TimedOut {
-                                    return Err(err)
+                                if err.kind() == io::ErrorKind::TimedOut {
+                                    // println!("Got Err Output:\n{}", &String::from_utf8_lossy(&err.capture.0.clone().unwrap_or(vec![])));
+                                    output.push_str(&String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])));
                                 }
-                            },
-                        }
-
-                        for ((), event) in events.iter() {
-                            if event.errored {
-                                return Err(io::Error::new(io::ErrorKind::Other, "event.errored"));
-                            }
-
-                            if event.readable || event.hangup {
-                                let mut buffer = [0; 1024];
-                                stdout.read(&mut buffer[..])?;
-                                output.push_str(&String::from_utf8_lossy(&buffer));
+                                else {
+                                    break;
+                                }
                             }
                         }
 
                         let currtime = Instant::now();
-                        if currtime - starttime > timeout {
+                        retvar = cmd.poll();
+                        if currtime - starttime > timeout || retvar.is_some() {
                             io.push(InputOutput::Output(output));
-                            got_timeout = true;
+                            has_finished = true;
                             break 'io_loop;
                         }
 
@@ -492,8 +508,7 @@ impl OrdIoTest {
         }
 
         // check for some final output
-        let mut retvar = None;
-        if !got_timeout {
+        if !has_finished {
             let given_retvar;
             let given_output;
 
@@ -516,6 +531,7 @@ impl OrdIoTest {
                     };
 
                     given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
+                    // println!("Got final output: {}", given_output);
                 }
 
                 Err(e) => {
@@ -537,17 +553,13 @@ impl OrdIoTest {
 
                     println!("Possibly failed capturing some/all output!");
                     given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
+                    // println!("Got final output: {}", given_output);
                 }
             }
 
-            retvar = match given_retvar {
-                Some(v) => match v {
-                    subprocess::ExitStatus::Exited(retvar) => Some(retvar as i32),
-                    subprocess::ExitStatus::Other(retvar) => Some(retvar),
-                    _ => None,
-                }
-                None => None,
-            };
+            if retvar.is_none() {
+                retvar = given_retvar;
+            }
 
             if let Some(prev_io) = io.last_mut() {
                 match prev_io {
@@ -560,6 +572,15 @@ impl OrdIoTest {
                 }
             }
         }
+
+        let retvar = match retvar {
+            Some(v) => match v {
+                subprocess::ExitStatus::Exited(retvar) => Some(retvar as i32),
+                subprocess::ExitStatus::Other(retvar) => Some(retvar),
+                _ => None,
+            },
+            None => None,
+        };
 
         Ok((io, retvar))
     }

@@ -222,7 +222,9 @@ impl TestcaseGenerator {
                                 background-color: IndianRed
                             }}
                             #diff-input {{
-                                text-decoration: underline
+                                text-decoration: underline;
+                                text-decoration-color: #222;
+                                color: #666
                             }}
                             .inline-code {{
                                 background: #eee;

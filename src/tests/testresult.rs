@@ -148,27 +148,29 @@ impl TestResult {
                     }
 
                     |templ| {
-                        &mut *templ << Raw(format!(
-                                "{}",
-                                box_html! {
-                                    div(id="args") {
-                                        table(id="differences") {
-                                            |templ| {
-                                                let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
-                                                if with_ws_hints {
-                                                    &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                            re.replace_all(&self.input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
-                                                            .replace("\n", "&#x21b5;<br />")
-                                                            .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
-                                                }
-                                                else {
-                                                    &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                            self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")));
+                        if self.diff.is_some() {
+                            &mut *templ << Raw(format!(
+                                    "{}",
+                                    box_html! {
+                                        div(id="args") {
+                                            table(id="differences") {
+                                                |templ| {
+                                                    let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
+                                                    if with_ws_hints {
+                                                        &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                                re.replace_all(&self.input.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>")
+                                                                .replace("\n", "&#x21b5;<br />")
+                                                                .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                    }
+                                                    else {
+                                                        &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                                self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")));
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
-                                }));
+                                    }));
+                        }
                     }
                 }
             }

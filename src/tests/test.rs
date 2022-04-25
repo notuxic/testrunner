@@ -13,6 +13,7 @@ use crate::project::binary::{Binary, GenerationError};
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum TestCaseKind {
     IOTest,
+    OrdIOTest,
 }
 
 pub enum DiffKind {
