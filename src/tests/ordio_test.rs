@@ -436,7 +436,9 @@ impl OrdIoTest {
 
         // check for some initial unexpected output
         if curr_io.clone().unwrap().is_empty() {
-            match communicator.read() {
+            let result = communicator.read();
+            std::thread::sleep(Duration::from_millis(25)); // workaround, there seems to be a race-condition in `subprocess`es code
+            match result {
                 Ok(comm) => {
                     io.push(InputOutput::Output(String::from_utf8_lossy(&comm.0.unwrap_or(vec![])).to_string()));
                 },
@@ -467,7 +469,9 @@ impl OrdIoTest {
                     loop {
                         output = String::from("");
 
-                        match communicator.read() {
+                        let result = communicator.read();
+                        std::thread::sleep(Duration::from_millis(25)); // workaround, there seems to be a race-condition in `subprocess`es code
+                        match result {
                             Ok(comm) => {
                                 output.push_str(&String::from_utf8_lossy(&comm.0.unwrap_or(vec![])));
                             },
@@ -605,3 +609,4 @@ impl OrdIoTest {
         Ok((io, retvar))
     }
 }
+
