@@ -1,7 +1,7 @@
 use std::fs::{copy, create_dir_all, Permissions, read_to_string, remove_dir_all, remove_file, set_permissions};
 use std::io;
 use std::io::Write;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Instant;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -428,7 +428,11 @@ pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), GenerationError> {
 }
 
 pub fn check_program_availability(prog: &str) -> Result<(), GenerationError> {
-    match Command::new(prog).spawn() {
+    match Command::new(prog)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn() {
         Ok(mut child) => {
             child.kill().map_err(|_| ());
             Ok(())
