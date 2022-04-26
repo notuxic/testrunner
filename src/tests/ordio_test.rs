@@ -21,6 +21,7 @@ pub enum InputOutput {
 
 pub enum IODiff {
     Input(String),
+    InputUnsent(String),
     Output(Changeset),
     OutputQuery(Changeset),
 }
@@ -166,27 +167,52 @@ impl Test for OrdIoTest {
         let mut len_user_sum = 0;
         let mut distances = Vec::with_capacity(io.len() / 2 + 2);
         let mut io_mismatch = false;
-        let io_diff: Vec<IODiff> = self.io.iter().zip(io.iter()).map(|e| {
-            if !((e.0.is_input() && e.1.is_input()) || (e.0.is_output() && e.1.is_output())) {
+        let mut it_ref_io = self.io.iter();
+        let mut it_io = io.iter();
+        let mut io_diff = Vec::<IODiff>::with_capacity(self.io.len());
+        while let Some(ref_io_e) = it_ref_io.next() {
+            let io_e = it_io.next();
+            if io_e.is_some() && !((ref_io_e.is_input() && io_e.unwrap().is_input()) || (ref_io_e.is_output() && io_e.unwrap().is_output())) {
                 io_mismatch = true;
             }
 
-            match e.0 {
-                InputOutput::Input(input) => IODiff::Input(input.to_string()),
-                InputOutput::Output(output) => {
-                    len_ref_sum += output.len();
-                    len_user_sum += e.1.clone().unwrap().len();
-                    let changeset = Changeset::new(output, &e.1.clone().unwrap(), &self.meta.projdef.diff_delim);
-                    distances.push(changeset.distance.abs() * output.len() as i32);
-                    if output.chars().last().unwrap() == '\n' {
-                        IODiff::Output(changeset)
+            let diff_e = match io_e {
+                Some(io_e) => {
+                    match ref_io_e {
+                        InputOutput::Input(input) => IODiff::Input(input.to_string()),
+                        InputOutput::Output(output) => {
+                            len_ref_sum += output.len();
+                            len_user_sum += io_e.clone().unwrap().len();
+                            let changeset = Changeset::new(output, &io_e.clone().unwrap(), &self.meta.projdef.diff_delim);
+                            distances.push(changeset.distance.abs() * output.len() as i32);
+                            if output.chars().last().unwrap() == '\n' {
+                                IODiff::Output(changeset)
+                            }
+                            else {
+                                IODiff::OutputQuery(changeset)
+                            }
+                        },
                     }
-                    else {
-                        IODiff::OutputQuery(changeset)
+                },
+                None => {
+                    match ref_io_e {
+                        InputOutput::Input(input) => IODiff::InputUnsent(input.to_string()),
+                        InputOutput::Output(output) => {
+                            len_ref_sum += output.len();
+                            let changeset = Changeset::new(output, "", &self.meta.projdef.diff_delim);
+                            distances.push(changeset.distance.abs() * output.len() as i32);
+                            if output.chars().last().unwrap() == '\n' {
+                                IODiff::Output(changeset)
+                            }
+                            else {
+                                IODiff::OutputQuery(changeset)
+                            }
+                        },
                     }
-                }
-            }
-        }).collect();
+                },
+            };
+            io_diff.push(diff_e);
+        }
         if io_mismatch {
             return Err(GenerationError::IOMismatch);
         }
@@ -347,7 +373,7 @@ impl OrdIoTest {
         let reader = BufReader::new(file);
 
         Ok(reader.lines().fold(Vec::<InputOutput>::new(), |mut acc, e| {
-            if let Ok(mut e) = e {
+            if let Ok(e) = e {
                 let curr_io: InputOutput;
 
                 if e.starts_with("> ") {
@@ -424,7 +450,6 @@ impl OrdIoTest {
         // check for some initial unexpected output
         if curr_io.clone().unwrap().is_empty() {
             let result = communicator.read();
-            std::thread::sleep(Duration::from_millis(25)); // workaround, there seems to be a race-condition in `subprocess`es code
             match result {
                 Ok(comm) => {
                     io.push(InputOutput::Output(String::from_utf8_lossy(&comm.0.unwrap_or(vec![])).to_string()));
@@ -448,30 +473,19 @@ impl OrdIoTest {
                 },
                 InputOutput::Output(_) => {
                     let mut output;
+                    output = String::from("");
                     loop {
-                        output = String::from("");
-
                         let result = communicator.read();
-                        std::thread::sleep(Duration::from_millis(25)); // workaround, there seems to be a race-condition in `subprocess`es code
                         match result {
                             Ok(comm) => {
                                 output.push_str(&String::from_utf8_lossy(&comm.0.unwrap_or(vec![])));
                             },
                             Err(err) => {
-                                if err.kind() == io::ErrorKind::TimedOut {
-                                    output.push_str(&String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])));
-                                }
-                                else {
+                                output.push_str(&String::from_utf8_lossy(&err.capture.0.clone().unwrap_or(vec![])));
+                                if err.kind() != io::ErrorKind::TimedOut {
                                     break;
                                 }
                             }
-                        }
-
-                        retvar = cmd.poll();
-                        if retvar.is_some() {
-                            io.push(InputOutput::Output(output));
-                            has_finished = true;
-                            break 'io_loop;
                         }
 
                         let currtime = Instant::now();
@@ -498,6 +512,27 @@ impl OrdIoTest {
                             break 'io_loop;
                         }
 
+                        retvar = cmd.poll();
+                        if retvar.is_some() {
+                            // check for some final output
+                            let result = communicator.read();
+                            match result {
+                                Ok(comm) => {
+                                    output.push_str(&String::from_utf8_lossy(&comm.0.unwrap_or(vec![])));
+                                },
+                                Err(err) => {
+                                    output.push_str(&String::from_utf8_lossy(&err.capture.0.clone().unwrap_or(vec![])));
+                                    if err.kind() != io::ErrorKind::TimedOut {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            io.push(InputOutput::Output(output));
+                            has_finished = true;
+                            break 'io_loop;
+                        }
+
                         if self.io_prompt.is_match(&output) {
                             break;
                         }
@@ -515,6 +550,12 @@ impl OrdIoTest {
             };
         }
 
+        let currtime = Instant::now();
+        if currtime - starttime > timeout {
+            println!("Testcase {} ran into a timeout!", self.meta.number);
+            retvar = None;
+        }
+
         // check for some final output
         if !has_finished {
             let given_retvar;
@@ -522,7 +563,12 @@ impl OrdIoTest {
 
             drop(stdin);
             let capture = communicator.read();
-            std::thread::sleep(Duration::from_millis(25)); // workaround, there seems to be a race-condition in `subprocess`es code
+
+            let currtime = Instant::now();
+            if currtime - starttime > timeout {
+                println!("Testcase {} ran into a timeout!", self.meta.number);
+            }
+
             match capture {
                 Ok(c) => {
                     given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
@@ -541,10 +587,6 @@ impl OrdIoTest {
                 }
 
                 Err(e) => {
-                    if e.kind() == io::ErrorKind::TimedOut {
-                        println!("Testcase {} ran into a timeout!", self.meta.number);
-                    }
-
                     given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
                         Some(retvar) => Some(retvar),
                         None => {

@@ -226,6 +226,12 @@ impl TestcaseGenerator {
                                 text-decoration-color: #222;
                                 color: #666
                             }}
+                            #diff-input-unsent {{
+                                text-decoration: underline;
+                                text-decoration-color: #222;
+                                background-color: turquoise;
+                                color: #222
+                            }}
                             .inline-code {{
                                 background: #eee;
                                 font-family: 'Hack', monospace;
@@ -248,6 +254,9 @@ impl TestcaseGenerator {
                             }}
                             #diff-remove .whitespace-hint {{
                                 color: darkred
+                            }}
+                            #diff-input-unsent .whitespace-hint {{
+                                color: darkcyan
                             }}
                             #failed {{
                                 width: 61em;
