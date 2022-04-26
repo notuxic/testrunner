@@ -203,14 +203,14 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
                             match io_diff {
                                 IODiff::Input(input) => {
                                     if with_ws_hints {
-                                        diffright.push_str(&format!("<span id=\"diff-input\">{}</span><span class=\"whitespace-hint\">{}</span>", re.replace_all(
-                                                &input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
-                                        diffleft.push_str(&format!("<span id=\"diff-input\">{}</span><span class=\"whitespace-hint\">{}</span>", re.replace_all(
-                                                &input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                        diffright.push_str(&format!("<span id=\"diff-input\">{}</span>", re.replace_all(
+                                                &input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                        diffleft.push_str(&format!("<span id=\"diff-input\">{}</span>", re.replace_all(
+                                                &input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
                                     }
                                     else {
-                                        diffright.push_str(&format!("{}{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
-                                        diffleft.push_str(&format!("{}{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                        diffright.push_str(&format!("{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
+                                        diffleft.push_str(&format!("{}", input.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
                                     }
                                 },
                                 IODiff::Output(changeset) => {
