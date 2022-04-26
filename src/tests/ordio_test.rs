@@ -164,7 +164,6 @@ impl Test for OrdIoTest {
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
         let mut len_ref_sum = 0;
-        let mut len_user_sum = 0;
         let mut distances = Vec::with_capacity(io.len() / 2 + 2);
         let mut io_mismatch = false;
         let mut it_ref_io = self.io.iter();
@@ -182,9 +181,12 @@ impl Test for OrdIoTest {
                         InputOutput::Input(input) => IODiff::Input(input.to_string()),
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
-                            len_user_sum += io_e.clone().unwrap().len();
                             let changeset = Changeset::new(output, &io_e.clone().unwrap(), &self.meta.projdef.diff_delim);
-                            distances.push(changeset.distance.abs() * output.len() as i32);
+                            distances.push(percentage_from_levenstein(
+                                    changeset.distance,
+                                    output.len(),
+                                    io_e.clone().unwrap().len()
+                            ) * output.len() as f32);
                             if output.chars().last().unwrap() == '\n' {
                                 IODiff::Output(changeset)
                             }
@@ -200,7 +202,11 @@ impl Test for OrdIoTest {
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
                             let changeset = Changeset::new(output, "", &self.meta.projdef.diff_delim);
-                            distances.push(changeset.distance.abs() * output.len() as i32);
+                            distances.push(percentage_from_levenstein(
+                                    changeset.distance,
+                                    output.len(),
+                                    0
+                            ) * output.len() as f32);
                             if output.chars().last().unwrap() == '\n' {
                                 IODiff::Output(changeset)
                             }
@@ -216,11 +222,11 @@ impl Test for OrdIoTest {
         if io_mismatch {
             return Err(GenerationError::IOMismatch);
         }
-        let distance: i32 = distances.iter().sum::<i32>() / len_ref_sum as i32;
+        let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
 
         let add_diff = self.get_add_diff();
         let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
-            && distance == 0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0, 0.0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
+            && distance >= 1.0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0, 0.0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
 
         let input = self.io.iter().map(|e| {
             match e {
@@ -236,7 +242,7 @@ impl Test for OrdIoTest {
             }
         }).collect::<Vec<String>>().join("");
 
-        if self.meta.projdef.verbose && distance > 0
+        if self.meta.projdef.verbose && distance < 0.9999
         {
             println!("Diff-Distance: {:?}", distance);
             println!("------ START Reference ------");
@@ -357,11 +363,7 @@ impl Test for OrdIoTest {
             description: self.meta.desc.clone().unwrap_or(String::from("")),
             number: self.meta.number,
             kind: self.meta.kind,
-            distance_percentage: Some(percentage_from_levenstein(
-                    distance,
-                    len_ref_sum,
-                    len_user_sum,
-            )),
+            distance_percentage: Some(distance),
             protected: self.meta.protected,
         })
     }
