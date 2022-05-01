@@ -101,7 +101,10 @@ fn main() {
             println!("\nDone testing");
             println!("Passed testcases: {} / {}", generator.testresults.iter().filter(|test| test.passed).count(), generator.testresults.len());
         },
-        Err(e) => eprintln!("Error running:\n{}", e),
+        Err(e) => {
+            eprintln!("Error running:\n{}", e);
+            std::process::exit(1);
+        },
     };
 
 
