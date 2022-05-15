@@ -57,9 +57,14 @@ impl Test for IoTest {
 
         let had_timeout = !retvar.is_some();
 
-        if given_output.len() > reference_output.len() * 2 {
-            println!("Reducing your output length because its bigger than 2 * reference output");
-            given_output.truncate(reference_output.len() * 2);
+        let truncated_output;
+        if given_output.chars().count() > reference_output.chars().count() * 2 {
+            println!("Truncating your output, because it's much longer than the reference output!");
+            given_output.truncate(given_output.char_indices().nth(reference_output.chars().count() * 2).unwrap_or((512, ' ')).0);
+            truncated_output = true;
+        }
+        else {
+            truncated_output = false;
         }
 
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
@@ -141,6 +146,7 @@ impl Test for IoTest {
             io_diff: None,
             add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
+            truncated_output,
             implemented: None,
             passed,
             output: given_output.clone(),

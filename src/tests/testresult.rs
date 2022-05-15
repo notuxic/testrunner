@@ -25,6 +25,7 @@ pub struct TestResult {
     pub io_diff: Option<Vec<IODiff>>,
     pub distance_percentage: Option<f32>,
     pub add_distance_percentage: Option<f32>,
+    pub truncated_output: bool,
     pub mem_leaks: i32,
     pub mem_errors: i32,
     pub mem_logfile: String,
@@ -130,6 +131,12 @@ impl TestResult {
                             else {
                                 td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.mem_errors, self.mem_leaks, self.mem_logfile))}
                             }
+                        }
+                    }
+
+                    @ if self.truncated_output {
+                        div(id="failed") {
+                            span(class="warning") {:"Your output has been truncated, as it is a lot longer than the reference output!"}
                         }
                     }
 

@@ -143,18 +143,20 @@ impl Test for OrdIoTest {
 
         let had_timeout = !retvar.is_some();
 
+        let mut truncated_output = false;
         let ref_output_len = match self.io.iter().rev().rfind(|io_e| io_e.is_output()) {
             Some(io_e) => {
-                io_e.clone().unwrap().len()
+                io_e.clone().unwrap().chars().count()
             },
             None => { 256 },
         };
         if let Some(io_e) = io.iter_mut().rev().rfind(|io_e| io_e.is_output()) {
             match io_e {
                 InputOutput::Output(ref mut out) => {
-                    if out.len() > ref_output_len * 2 {
-                        println!("Reducing your output length because its bigger than 2 * reference output");
-                        out.truncate(ref_output_len * 2);
+                    if out.chars().count() > ref_output_len * 2 {
+                        println!("Truncating your output, because it's much longer than the reference output!");
+                        out.truncate(out.char_indices().nth(ref_output_len * 2).unwrap_or((512, ' ')).0);
+                        truncated_output = true;
                     }
                 },
                 _ => {},
@@ -348,6 +350,7 @@ impl Test for OrdIoTest {
             io_diff: Some(io_diff),
             add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
+            truncated_output,
             implemented: None,
             passed,
             output,
