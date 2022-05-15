@@ -257,7 +257,13 @@ impl Test for OrdIoTest {
             });
             println!("------ END Reference ------");
             println!("------ START Yours ------");
-            println!("Your Output:\n{:?}", output);
+            println!("Your Output:\n");
+            io.iter().for_each(|e| {
+                match e {
+                    InputOutput::Output(output) => println!("{}", output),
+                    _ => (),
+                }
+            });
             println!("------ END Yours ------");
 
             // prints diff with colors to terminal

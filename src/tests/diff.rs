@@ -223,10 +223,71 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
                                     }
                                 },
                                 IODiff::Output(changeset) => {
-                                    for c in &changeset.diffs {
+                                    let mut it = changeset.diffs.iter().peekable();
+                                    while let Some(c) = it.next() {
                                         match *c {
-                                            Difference::Same(ref z)=>
+                                            Difference::Same(ref z) =>
                                             {
+                                                if z.len() == 0 {
+                                                    continue;
+                                                }
+
+                                                if it.peek().is_some() {
+                                                    let line_count = z.lines().count();
+                                                    match it.peek().unwrap() {
+                                                        Difference::Rem(y) => {
+                                                            if y.len() == 0 {
+                                                                if with_ws_hints {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                        diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                    diffleft.push_str(&format!("<span id=\"diff-remove\">{}</span><br />",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                                }
+                                                                else {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                        diffleft.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&format!("{}{}", z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                    diffleft.push_str(&format!("{}<br />", z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
+                                                                }
+                                                                continue;
+                                                            }
+                                                        },
+                                                        Difference::Add(y) => {
+                                                            if y.len() == 0 {
+                                                                if with_ws_hints {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                        diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&format!("<span id=\"diff-add\">{}</span>",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                                    diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                }
+                                                                else {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                        diffleft.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"));
+                                                                    diffleft.push_str(&format!("{}{}", z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                }
+                                                                continue;
+                                                            }
+                                                        },
+                                                        _ => {},
+                                                    }
+                                                }
                                                 if with_ws_hints {
                                                     diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
                                                                 &z.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
@@ -240,6 +301,10 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
                                             }
                                             Difference::Rem(ref z) =>
                                             {
+                                                if z.len() == 0 {
+                                                    continue;
+                                                }
+
                                                 if with_ws_hints {
                                                     diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                             re.replace_all(&z.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
@@ -251,6 +316,10 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
 
                                             Difference::Add(ref z) =>
                                             {
+                                                if z.len() == 0 {
+                                                    continue;
+                                                }
+
                                                 if with_ws_hints {
                                                     diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                             re.replace_all(&z.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
@@ -276,6 +345,67 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
                                         match *c {
                                             Difference::Same(ref z)=>
                                             {
+                                                if z.len() == 0 {
+                                                    continue;
+                                                }
+
+                                                if it.peek().is_some() {
+                                                    let line_count = z.lines().count();
+                                                    match it.peek().unwrap() {
+                                                        Difference::Rem(y) => {
+                                                            if y.len() == 0 {
+                                                                if with_ws_hints {
+                                                                    if line_count > 1
+                                                                    {
+                                                                        diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                        diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                    diffleft.push_str(&format!("<span id=\"diff-remove\">{}</span><br />",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                                }
+                                                                else {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                        diffleft.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&format!("{}{}", z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                    diffleft.push_str(&format!("{}<br />", z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
+                                                                }
+                                                                continue;
+                                                            }
+                                                        },
+                                                        Difference::Add(y) => {
+                                                            if y.len() == 0 {
+                                                                if with_ws_hints {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                        diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
+                                                                                    &z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&format!("<span id=\"diff-add\">{}</span>",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                                    diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
+                                                                            re.replace_all(&z.lines().last().unwrap_or("").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
+                                                                }
+                                                                else {
+                                                                    if line_count > 1 {
+                                                                        diffright.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                        diffleft.push_str(&format!("{}{}", z.lines().take(line_count - 1).collect::<Vec<&str>>().join("\n").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                    }
+                                                                    diffright.push_str(&z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"));
+                                                                    diffleft.push_str(&format!("{}{}", z.lines().last().unwrap_or("").replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;"), line_end));
+                                                                }
+                                                                continue;
+                                                            }
+                                                        },
+                                                        _ => {},
+                                                    }
+                                                }
                                                 if with_ws_hints {
                                                     diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
                                                                 &z.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
@@ -289,6 +419,10 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
                                             }
                                             Difference::Rem(ref z) =>
                                             {
+                                                if z.len() == 0 {
+                                                    continue;
+                                                }
+
                                                 if with_ws_hints {
                                                     diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                             re.replace_all(&z.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
@@ -300,6 +434,10 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
 
                                             Difference::Add(ref z) =>
                                             {
+                                                if z.len() == 0 {
+                                                    continue;
+                                                }
+
                                                 if with_ws_hints {
                                                     diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
                                                             re.replace_all(&z.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
@@ -315,12 +453,12 @@ pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: boo
                         });
 
                         if with_ws_hints {
-                            diffright = diffright.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
-                            diffleft = diffleft.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
+                            diffright = diffright.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />").replace("\r", "&#x240d;");
+                            diffleft = diffleft.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />").replace("\r", "&#x240d;");
                         }
                         else {
-                            diffright = diffright.replace("\n", "<br />").replace("\0", "<br />");
-                            diffleft = diffleft.replace("\n", "<br />").replace("\0", "<br />");
+                            diffright = diffright.replace("\n", "<br />").replace("\0", "<br />").replace("\r", "<br />");
+                            diffleft = diffleft.replace("\n", "<br />").replace("\0", "<br />").replace("\r", "<br />");
                         }
 
                         &mut *templ << Raw(format!("<tr><th>Reference {}</th><th>Your {}</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", source_name, source_name, diffright, diffleft));
