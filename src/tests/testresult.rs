@@ -118,7 +118,7 @@ impl TestResult {
                                 td{:Raw(format!("<span class=\"inline-code\">{}</span>", self.command_used))}
                             }
                             tr {
-                                th{:"Return Value"}
+                                th{:"Exit Code"}
                                 td{:Raw(format!("expected: <span class=\"inline-code\">{}</span>, got: <span class=\"inline-code\">{}</span>", self.exp_ret.unwrap_or(-1), self.ret.unwrap_or(-99)))}
                             }
                         }
@@ -204,6 +204,7 @@ impl TestResult {
                 td{@ if protected_mode && self.protected { i{:"redacted"} } else { :  Raw(format!("<a href=\"#tc-{}\">#{:0>2}:&nbsp;{}</a>", &self.number, &self.number, &name)) }}
                 td{:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                 td{:format!("{}%", (distance * 1000.0).floor() / 10.0)}
+                td{:format!("{}", if self.ret.unwrap_or(-99) == self.exp_ret.unwrap_or(-1) { "correct" } else { "incorrect" })}
                 td{:format!("{}", if self.timeout { "yes" } else { "no" })}
                 td{:format!("{}", self.mem_errors)}
                 td{:format!("{}", self.mem_leaks)}

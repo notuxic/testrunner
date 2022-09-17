@@ -347,6 +347,9 @@ impl TestcaseGenerator {
                                          : "Diff"
                                      }
                                      th{
+                                         : "Exit Code"
+                                     }
+                                     th{
                                          : "Timeout"
                                      }
                                      th{
