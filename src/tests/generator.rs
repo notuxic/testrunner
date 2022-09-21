@@ -98,6 +98,7 @@ impl TestcaseGenerator {
             html{
                 head{
                     title:"Testreport";
+                    meta(charset="UTF-8");
                 }
                 //CSS
                 style{
