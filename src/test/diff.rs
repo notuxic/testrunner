@@ -1,15 +1,16 @@
 use difference::{Changeset, Difference};
 use horrorshow::Raw;
 use regex::Regex;
+
+use crate::testrunner::TestrunnerError;
 use super::ordio_test::IODiff;
-use super::testresult::HTMLError;
 
 fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) -> String {
     let decdata: Vec<u8> = decdata.split(' ').map(|c| c.parse::<u8>().unwrap()).collect();
     let mut hexdump = String::with_capacity(81);
     for chunk in decdata.chunks(16) {
         let hex = chunk.iter().map(|c| {
-            String::from(format!("{:0>2X}", c))
+            format!("{:0>2X}", c)
         }).collect::<Vec<String>>().join(" ");
         let ascii = chunk.iter().map(|c| {
             let c = *c as char;
@@ -26,7 +27,7 @@ fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) 
     hexdump
 }
 
-pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i32), HTMLError> {
+pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i32), TestrunnerError> {
     let mut ref_str = String::with_capacity(reference.len() * 4);
     let mut giv_str = String::with_capacity(given.len() * 4);
 
@@ -115,7 +116,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
     Ok((String::from(retvar), distance))
 }
 
-pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, HTMLError> {
+pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, TestrunnerError> {
     let line_end = if compare_mode == "\n" { "\n" } else { "" };
 
     let retvar = format!(
@@ -185,7 +186,7 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
     Ok(String::from(retvar))
 }
 
-pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, HTMLError> {
+pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, TestrunnerError> {
     let line_end = if compare_mode == "\n" { "\n" } else { "" };
 
     let retvar = format!(

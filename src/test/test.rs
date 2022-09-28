@@ -1,64 +1,90 @@
-use std::{fmt, io::Read};
 use std::fs::File;
+use std::sync::Weak;
+use std::{fmt, io::Read};
+
 use difference::Changeset;
-use serde_derive::Serialize;
+use serde_derive::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::project::binary::Binary;
+use crate::project::definition::ProjectDefinition;
+use crate::testresult::testresult::Testresult;
+use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::diff::{changeset_to_html, diff_binary_to_html};
 use super::io_test::percentage_from_levenstein;
-use super::testcase::Testcase;
-use super::testresult::TestResult;
-use crate::project::definition::ProjectDefinition;
-use crate::project::binary::{Binary, GenerationError};
 
 
-#[derive(Debug, Clone, Copy, Serialize)]
-pub enum TestCaseKind {
+#[derive(Debug, Error)]
+pub enum TestingError {
+    #[error("valgrind log not found: {0}")]
+    VgLogNotFound(String),
+    #[error("failed parsing valgrind log: {0}")]
+    VgLogParseError(String),
+    #[error("required binary not found: {0}")]
+    MissingBinDependency(String),
+    #[error("i/o config not found: {0}")]
+    IoConfigNotFound(String),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+    #[error("internal i/o error: i/o mismatch")]
+    IOMismatch,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub enum TestcaseType {
+    #[serde(alias = "IO")]
     IOTest,
+    #[serde(alias = "OrdIO")]
     OrdIOTest,
 }
 
+impl fmt::Display for TestcaseType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub enum DiffKind {
     PlainText,
     Binary,
 }
 
-#[allow(dead_code)]
-pub struct TestMeta {
-    pub number: i32,
-    pub name: String,
-    pub desc: Option<String>,
-    pub timeout: Option<u64>,
-    pub projdef: ProjectDefinition, // use lifetime ref?
-    pub kind: TestCaseKind,
-    pub add_diff_kind: DiffKind,
-    pub add_out_file: Option<String>,
-    pub add_exp_file: Option<String>,
-    pub protected: bool,
-}
-
-impl fmt::Display for TestCaseKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-            // or, alternatively:
-            // fmt::Debug::fmt(self, f)
+impl Default for DiffKind {
+    fn default() -> DiffKind {
+        DiffKind::PlainText
     }
 }
 
-pub trait Test {
-    fn run(&self) -> Result<TestResult, GenerationError>;
-    fn from_saved_tc(
-        number: i32,
-        testcase: &Testcase,
-        projdef: &ProjectDefinition,
-        binary: Option<&Binary>,
-    ) -> Result<Self, GenerationError>
-    where
-        Self: Sized;
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TestMeta {
+    #[serde(skip)]
+    pub number: i32,
+    pub name: String,
+    pub description: Option<String>,
+    pub timeout: Option<u64>,
+    #[serde(default)]
+    pub add_diff_kind: DiffKind,
+    pub add_out_file: Option<String>,
+    pub add_exp_file: Option<String>,
+    #[serde(default)]
+    pub protected: bool,
+}
 
-    //fn report(&self) -> Result<String,GenerationError>;
+pub trait Test : erased_serde::Serialize {
+    fn init(&mut self, number: i32, project_definition: Weak<ProjectDefinition>, options: Weak<TestrunnerOptions>, binary: Weak<Binary>) -> Result<(), TestrunnerError>;
+
+    fn run(&self) -> Result<Box<dyn Testresult + Send + Sync>, TestingError>;
 
     fn get_test_meta(&self) -> &TestMeta;
 
-    fn get_add_diff(&self) -> Option<(String, i32, f32)> {
+    // needed for deserializing with `serde_tagged`
+    fn type_id(&self) -> &'static str;
+
+    fn deserialize_trait<'de, D: ?Sized>(deserializer: &mut dyn erased_serde::Deserializer<'de>) -> Result<Box<dyn Test + Send + Sync>, erased_serde::Error>
+        where Self: Sized;
+
+    fn get_add_diff(&self, options: &TestrunnerOptions) -> Option<(String, i32, f32)> {
         let test_meta = self.get_test_meta();
 
         if test_meta.add_out_file.is_some() && test_meta.add_exp_file.is_some() {
@@ -94,8 +120,8 @@ pub trait Test {
                     let orig = format!("{}", String::from_utf8_lossy(&buf_ref));
                     let edit = format!("{}", String::from_utf8_lossy(&buf_user));
 
-                    let changeset = Changeset::new(&orig, &edit, &test_meta.projdef.diff_delim);
-                    return match changeset_to_html(&changeset, &test_meta.projdef.diff_delim, test_meta.projdef.ws_hints, "File") {
+                    let changeset = Changeset::new(&orig, &edit, &options.diff_delim);
+                    return match changeset_to_html(&changeset, &options.diff_delim, options.ws_hints, "File") {
                         Ok(text) => Some((text, changeset.distance, percentage_from_levenstein(changeset.distance, buf_ref.len(), buf_user.len()))),
                         Err(_) => None,
                     }
@@ -112,3 +138,4 @@ pub trait Test {
         None
     }
 }
+

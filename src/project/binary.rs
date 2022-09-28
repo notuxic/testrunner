@@ -1,154 +1,110 @@
-use std::fmt;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::{Command, Stdio};
+
 use regex::Regex;
 use serde_derive::Serialize;
+use thiserror::Error;
+
 use super::definition::ProjectDefinition;
 
 
-#[derive(Debug)]
-pub enum GenerationError {
-    ConfigErrorIO,
-    BinaryRequired,
-    VgLogNotFound,
-    VgLogParseError,
-    CouldNotMakeBinary,
-    MissingCLIDependency(String),
-    IOMismatch,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CompileError {
-    BinaryNotFound,
+    #[error("binary not found: {0}")]
+    BinaryNotFound(String),
+    #[error("compilation failed!")]
     CompilationFailed,
-    MakefileNotDefined,
-    MakefileNotFound,
-    MakeFailed,
+    #[error("no Makefile found at: {0}")]
+    MakefileNotFound(String),
+    #[error("calling `make` failed: {}", .0.to_string())]
+    MakeFailed(std::io::Error),
 }
 
-#[derive(Clone, Debug, Serialize)]
-pub struct CompileInfo {
+#[derive(Debug, Default, Serialize)]
+pub struct CompilationInfo {
     pub warnings: Option<HashMap<String, i32>>,
     pub errors: Option<String>,
     pub compiled: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Default)]
 pub struct Binary {
-    pub project_definition: ProjectDefinition,
-    pub info: CompileInfo,
+    pub info: CompilationInfo,
 }
 
 impl Binary {
-    pub fn from_project_definition(proj_def: &ProjectDefinition) -> Result<Self, CompileError> {
-        let retvar = Binary {
-            project_definition: proj_def.clone(),
-            info: CompileInfo {
-                errors: None,
-                warnings: None,
-                compiled: false,
-            },
-        };
-        Ok(retvar)
-    }
 
-    pub fn exists(&self) -> bool {
-        Path::new(&self.project_definition.binary_path).is_file()
-    }
-
-    pub fn compile(&mut self) -> Result<(), CompileError> {
+    pub fn from_project_definition(project_definition: &ProjectDefinition) -> Result<Self, CompileError> {
         // use pre-compiled binary
-        if self.project_definition.make_targets.is_none() {
-            if self.exists() {
-                return Ok(());
+        if project_definition.makefile_path.is_none() {
+            if Self::exists(project_definition) {
+                Ok(Binary { info: CompilationInfo { warnings: None, errors: None, compiled: true } })
             }
             else {
-                return Err(CompileError::BinaryNotFound);
+                return Err(CompileError::BinaryNotFound(project_definition.binary_path.clone()));
             }
         }
         // use `make`
-        else if self.project_definition.make_targets.is_some() {
-            self.compile_with_make()
+        else if project_definition.makefile_path.is_some() {
+            Ok(Binary { info: Self::compile_with_make(project_definition)? })
         }
         // satisfy the compiler
         else {
-            Ok(())
+            Ok(Binary { info: CompilationInfo { warnings: None, errors: None, compiled: false } })
         }
     }
 
-    pub fn compile_with_make(&mut self) -> Result<(), CompileError> {
-        let makefile_path = match &self.project_definition.makefile_path {
-            Some(mk_path) => if Path::new(&format!("{}/Makefile", &mk_path)).is_file() {
-                    mk_path.clone()
-                }
-                else {
-                    return Err(CompileError::MakefileNotFound);
-                },
-            None => {
-                return Err(CompileError::MakefileNotDefined);
-            }
-        };
+    fn exists(project_definition: &ProjectDefinition) -> bool {
+        Path::new(&project_definition.binary_path).is_file()
+    }
+
+    fn compile_with_make(project_definition: &ProjectDefinition) -> Result<CompilationInfo, CompileError> {
+        let makefile_path = project_definition.makefile_path.as_ref().unwrap();
+        if !Path::new(&format!("{}/Makefile", &makefile_path)).is_file() {
+            return Err(CompileError::MakefileNotFound(makefile_path.clone()))
+        }
 
         let mut make_cmd = Command::new("make");
         make_cmd.current_dir(makefile_path);
         make_cmd.stderr(Stdio::piped());
         make_cmd.stdout(Stdio::piped());
-        make_cmd.args(self.project_definition.make_targets.clone().unwrap_or(vec![]));
+        make_cmd.args(project_definition.make_targets.clone().unwrap_or(vec![]));
+
+        let compiled: bool;
+        let errors: Option<String> = None;
+        let mut warnings: Option<HashMap<String, i32>> = None;
 
         match make_cmd.output() {
             Ok(res) => {
                 let errorstring = String::from_utf8(res.stderr).unwrap_or_default();
                 let re_warnings = Regex::new(r"warning: .*? \[-W(?P<warn>[^\]]+)\]").unwrap();
                 if res.status.code().unwrap_or(-1) != 0 {
-                    self.info.compiled = false;
-                    self.info.errors = Some(errorstring);
-                    println!("Compilation failed!");
                     Err(CompileError::CompilationFailed)
                 }
                 else {
-                    self.info.compiled = true;
-                    println!("Compilation successful!");
+                    compiled = true;
                     //checking for warnings...
-                    let mut warnings = HashMap::<String, i32>::new();
+                    let mut warns = HashMap::<String, i32>::new();
                     for cap in re_warnings.captures_iter(&errorstring) {
                         let warn = String::from(&cap["warn"]);
-                        let entry = warnings.entry(warn).or_insert(0);
+                        let entry = warns.entry(warn).or_insert(0);
                         *entry += 1;
                     }
-                    if !warnings.is_empty() {
+                    if !warns.is_empty() {
                         println!("Detected compiler warnings:");
-                        for (warn, amount) in warnings.iter_mut() {
+                        for (warn, amount) in warns.iter_mut() {
                             println!("  {}: {}", warn, *amount);
                         }
-                        self.info.warnings = Some(warnings);
+                        warnings = Some(warns);
                     }
-                    Ok(())
+                    Ok(CompilationInfo { compiled, errors, warnings })
                 }
             }
             Err(err) => {
-                println!("Compilation failed: {:?}", err);
-                Err(CompileError::MakeFailed)
+                Err(CompileError::MakeFailed(err))
             }
         }
-    }
-}
-
-impl std::fmt::Display for GenerationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "GenerationError: {}",
-            match self {
-                GenerationError::ConfigErrorIO => "ConfigErrorIO".to_string(),
-                GenerationError::BinaryRequired => "BinaryRequired".to_string(),
-                GenerationError::VgLogNotFound => "VgLogNotFound".to_string(),
-                GenerationError::VgLogParseError => "VgLogParseError".to_string(),
-                GenerationError::CouldNotMakeBinary => "CouldNotMakeBinary".to_string(),
-                GenerationError::MissingCLIDependency(dep) => format!("MissingCLIDependency({})", &dep),
-                GenerationError::IOMismatch => "IOMismatch".to_string(),
-            }
-        )
     }
 }
 

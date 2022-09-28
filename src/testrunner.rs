@@ -1,97 +1,130 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
+use std::fs::read_to_string;
+use std::sync::Arc;
+
 use horrorshow::Raw;
 use horrorshow::helper::doctype;
-use super::test::Test;
-use super::testcase::TestDefinition;
-use super::testresult::TestResult;
-use super::io_test::IoTest;
-use super::ordio_test::OrdIoTest;
-use crate::project::binary::{Binary, GenerationError};
+use serde::{Deserializer, Deserialize};
+use serde_derive::Deserialize;
+use serde_tagged::de::BoxFnSeed;
+use thiserror::Error;
 
-#[allow(dead_code)]
-pub struct TestcaseGenerator {
-    testcases: Vec<Box<dyn Test + Send + Sync>>,
-    pub testresults: Vec<TestResult>,
-    binary: Binary,
-    config: TestDefinition,
+use crate::project::binary::{Binary, CompileError};
+use crate::project::definition::ProjectDefinition;
+use crate::test::io_test::IoTest;
+use crate::test::ordio_test::OrdIoTest;
+use crate::test::test::{Test, TestingError};
+use crate::testresult::testresult::Testresult;
+
+
+#[derive(Debug, Error)]
+pub enum TestrunnerError {
+    #[error("config not found: {0}")]
+    ConfigNotFound(String),
+    #[error("failed parsing config: {0}")]
+    ConfigParseError(String),
+    #[error(transparent)]
+    CompileError(#[from] CompileError),
+    #[error(transparent)]
+    TestingError(#[from] TestingError),
+    #[error("error generating report: {}", .0.to_string())]
+    GenerationError(Box<dyn std::error::Error>),
 }
 
-impl TestcaseGenerator {
-    pub fn from_string(s: &String) -> Result<Self, GenerationError> {
-        let config: TestDefinition = match toml::from_str(s) {
-            Ok(c) => c,
-            Err(err) => {
-                println!("{}", err);
-                return Err(GenerationError::ConfigErrorIO);
-            }
-        };
+#[derive(Debug)]
+pub struct TestrunnerOptions {
+    pub verbose: bool,
+    pub diff_delim: String,
+    pub protected_mode: bool,
+    pub ws_hints: bool,
+    pub sudo: Option<String>,
+}
 
-        let binary: Binary = match Binary::from_project_definition(&config.project_definition) {
-            Ok(content) => content,
-            Err(err) => {
-                println!("{:?}", err);
-                return Err(GenerationError::CouldNotMakeBinary);
-            }
-        };
-        Ok(TestcaseGenerator {
-            config,
-            binary,
-            testcases: vec![],
-            testresults: vec![],
-        })
+impl Default for TestrunnerOptions {
+    fn default() -> Self {
+        TestrunnerOptions {
+            verbose: false,
+            diff_delim: "\n".to_owned(),
+            protected_mode: false,
+            ws_hints: true,
+            sudo: None,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Testrunner {
+    #[serde(deserialize_with = "Testrunner::deserialize_definition")]
+    project_definition: Arc<ProjectDefinition>,
+    testcases: Vec<Box<dyn Test + Send + Sync>>,
+    #[serde(skip)]
+    testresults: Vec<Box<dyn Testresult + Send + Sync>>,
+    #[serde(skip)]
+    binary: Arc<Binary>,
+    #[serde(skip)]
+    options: Arc<TestrunnerOptions>,
+}
+
+impl Testrunner {
+    pub fn from_file(path: &str, options: TestrunnerOptions) -> Result<Self, TestrunnerError> {
+        let config = read_to_string(path).map_err(|_| TestrunnerError::ConfigNotFound(path.to_string()))?;
+        let mut runner: Self = toml::from_str(&config).map_err(|err| TestrunnerError::ConfigParseError(err.to_string()))?;
+        runner.options = Arc::new(options);
+        runner.binary = Arc::new(Binary::from_project_definition(&runner.project_definition)?);
+
+        let mut tc_number = 0;
+        let project_definition = Arc::downgrade(&runner.project_definition);
+        let options = Arc::downgrade(&runner.options);
+        let binary = Arc::downgrade(&runner.binary);
+        runner.testcases.iter_mut().try_for_each(|tc| {
+            tc_number += 1;
+            tc.init(tc_number, project_definition.clone(), options.clone(), binary.clone())
+        })?;
+        Ok(runner)
     }
 
-    pub fn generate_generateables(&mut self) -> Result<(), GenerationError> {
-        let mut n: i32 = 1;
-        for tc in self.config.testcases.iter() {
-            match tc.testcase_type.as_str() {
-                "IO" => {
-                    let io_test = IoTest::from_saved_tc(n, tc, &self.config.project_definition, Some(&self.binary))?;
-                    self.testcases.push(Box::new(io_test));
-                }
-                "OrdIO" => {
-                    let ordio_test = OrdIoTest::from_saved_tc(n, tc, &self.config.project_definition, Some(&self.binary))?;
-                    self.testcases.push(Box::new(ordio_test));
-                }
-                _ => {}
-            }
-            n += 1;
-        }
-        return Ok(());
+    pub fn deserialize_definition<'de, D>(deserializer: D) -> Result<Arc<ProjectDefinition>, D::Error>
+        where D: Deserializer<'de>
+    {
+        return Ok(Arc::new(ProjectDefinition::deserialize(deserializer)?));
     }
 
-    pub fn run_generateables(&mut self) -> Result<(), GenerationError> {
-        let compilation_result = self.binary.compile();
-        if !compilation_result.is_ok() {
-            eprintln!("Could not compile binary, no tests were run!");
-            eprintln!("{:?}", compilation_result.unwrap_err());
-            return Err(GenerationError::CouldNotMakeBinary);
-        }
+    pub fn run_tests(&mut self) -> Result<(), TestrunnerError> {
+        self.testresults = match self.testcases.iter().try_fold(Vec::with_capacity(self.testcases.len()), |mut acc, tc| {
+            acc.push(tc.run()?);
+            Ok(acc)
+        }) {
+            Ok(results) => results,
+            Err(err) => return Err(err),
+        };
+        println!("\nPassed testcases: {} / {}", self.testresults.iter().filter(|test| test.passed()).count(), self.testresults.len());
+        Ok(())
+    }
 
-        self.testresults = self.testcases.iter().fold(Vec::<TestResult>::new(), |mut acc, tc| {
-            match tc.run() {
-                Ok(tr) => {
-                    acc.push(tr);
-                    acc
-                },
-                Err(e) => {
-                    println!("Error running testcase: {}", e);
-                    acc
-                },
+    pub fn generate_html_report(&self, protected_mode: bool) -> Result<String, TestrunnerError> {
+        let compiler_output = self.binary.info.errors.clone().unwrap_or("<i>failed fetching compiler output!</i>".to_owned());
+        let tc_all_num = self.testresults.len();
+        let mut tc_all_passed = 0;
+        let mut tc_public_num = 0;
+        let mut tc_public_passed = 0;
+        let mut tc_private_num = 0;
+        let mut tc_private_passed = 0;
+        self.testresults.iter().for_each(|tc| {
+            if tc.protected() {
+                tc_private_num += 1;
+                if tc.passed() {
+                    tc_private_passed += 1;
+                    tc_all_passed += 1;
+                }
+            }
+            else {
+                tc_public_num += 1;
+                if tc.passed() {
+                    tc_public_passed += 1;
+                    tc_all_passed += 1;
+                }
             }
         });
-
-        return Ok(());
-    }
-
-    pub fn make_html_report(&self, compare_mode : &str, protected_mode : bool) -> Result<String, GenerationError> {
-        let tc_public_num = self.testresults.iter().filter(|test| !test.protected).collect::<Vec<&TestResult>>().len();
-        let tc_public_passed = self.testresults.iter().filter(|test| !test.protected && test.passed).collect::<Vec<&TestResult>>().len();
-        let tc_private_num = self.testresults.iter().filter(|test| test.protected).collect::<Vec<&TestResult>>().len();
-        let tc_private_passed = self.testresults.iter().filter(|test| test.protected && test.passed).collect::<Vec<&TestResult>>().len();
-        let tc_all_num = self.testresults.len();
-        let tc_all_passed = self.testresults.iter().filter(|test| test.passed).collect::<Vec<&TestResult>>().len();
-        let compiler_output = self.binary.info.errors.clone().unwrap_or(String::from("<i>failed fetching compiler output!</i>"));
 
         let result = html! {
             : doctype::HTML;
@@ -286,7 +319,7 @@ impl TestcaseGenerator {
                                 justify-content: center;
                                 align-items: center
                             }}
-                        "#, self.config.project_definition.diff_table_width.unwrap_or(82), self.config.project_definition.diff_table_width.unwrap_or(82)))
+                        "#, self.project_definition.diff_table_width.unwrap_or(82), self.project_definition.diff_table_width.unwrap_or(82)))
                 }
                 body{
                     h1 : "Testreport";
@@ -364,12 +397,12 @@ impl TestcaseGenerator {
                                      }
                                      |templ| {
                                          for tc in self.testresults.iter() {
-                                             match tc.get_html_short(protected_mode) {
+                                             match tc.get_html_entry_summary(protected_mode) {
                                                  Ok(res)=> {
                                                      &mut *templ << Raw(res);
                                                  }
                                                  Err(_err) => {
-                                                     &mut *templ << Raw(String::from("<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>"))
+                                                     &mut *templ << Raw("<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>".to_owned())
                                                  }
                                              }
                                          }
@@ -380,8 +413,8 @@ impl TestcaseGenerator {
 
                                   |templ| {
                                       for tc in self.testresults.iter() {
-                                          if !(protected_mode && tc.protected) {
-                                              &mut *templ << Raw(tc.get_html_long(protected_mode, compare_mode, self.config.project_definition.ws_hints).unwrap_or(String::from("<div>Error</div>")));
+                                          if !(protected_mode && tc.protected()) {
+                                              &mut *templ << Raw(tc.get_html_entry_detailed().unwrap_or("<div>Error</div>".to_owned()));
                                           }
                                       }
                                   }
@@ -390,42 +423,40 @@ impl TestcaseGenerator {
             }
         };
 
-        Ok(String::from(format!("{}", result)))
+        Ok(format!("{}", result))
     }
 
-    pub fn make_json_report(&self) -> Result<String, GenerationError> {
+    pub fn generate_json_report(&self) -> Result<String, TestrunnerError> {
         let mut json: HashMap<String, serde_json::Value> = HashMap::new();
         let mut results: Vec<serde_json::Value> = vec![];
         for tc in self.testresults.iter() {
-            results.push(tc.get_json()?);
+            results.push(tc.get_json_entry()?);
         }
-        json.insert(String::from("testcases"), serde_json::to_value(results).unwrap());
-        json.insert(String::from("binary"), serde_json::to_value(self.binary.info.clone()).unwrap());
+        json.insert("testcases".to_owned(), serde_json::to_value(results).unwrap());
+        json.insert("binary".to_owned(), serde_json::to_value(&self.binary.info).unwrap());
 
-        serde_json::to_string_pretty(&json).map_err(|_| GenerationError::VgLogParseError)
+        serde_json::to_string_pretty(&json).map_err(|err| TestrunnerError::GenerationError(Box::new(err)))
     }
+}
 
-    pub fn set_verbosity(&mut self, verbose: bool) {
-        self.config.project_definition.verbose = verbose;
+impl<'de> Deserialize<'de> for Box<dyn Test + Send + Sync> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de>
+    {
+        serde_tagged::de::internal::deserialize(deserializer, "type", get_deserializer_registry())
     }
+}
 
-    pub fn set_diff_delimiter(&mut self, diff_delim: String) {
-        self.config.project_definition.diff_delim = diff_delim;
-    }
-
-    pub fn set_protected_mode(&mut self, prot: bool) {
-        self.config.project_definition.protected_mode = prot;
-    }
-
-    pub fn set_whitespace_hinting(&mut self, hints: bool) {
-        self.config.project_definition.ws_hints = hints;
-    }
-
-    pub fn set_sudo(&mut self, user: Option<&str>) {
-        self.config.project_definition.sudo = match user {
-            Some(x) => Some(String::from(x)),
-            None => None,
+pub type DeserializerRegistry = BTreeMap<&'static str, BoxFnSeed<Box<dyn Test + Send + Sync>>>;
+pub fn get_deserializer_registry() -> &'static DeserializerRegistry {
+    lazy_static! {
+        static ref DESERIALIZER_REGISTRY: DeserializerRegistry = {
+            let mut registry = BTreeMap::new();
+            registry.insert("IO", BoxFnSeed::new(IoTest::deserialize_trait::<dyn erased_serde::Deserializer>));
+            registry.insert("OrdIO", BoxFnSeed::new(OrdIoTest::deserialize_trait::<dyn erased_serde::Deserializer>));
+            registry
         };
     }
+    &DESERIALIZER_REGISTRY
 }
 

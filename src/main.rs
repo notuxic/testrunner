@@ -1,15 +1,18 @@
 #[macro_use]
 extern crate horrorshow;
 #[macro_use]
-extern crate maplit;
+extern crate lazy_static;
 
-
-use std::fs::{read_to_string, write};
-use clap::{App, Arg, crate_authors, crate_description, crate_version};
-use crate::tests::generator::TestcaseGenerator;
-
-mod tests;
 mod project;
+mod test;
+mod testresult;
+mod testrunner;
+
+use std::fs::write;
+use clap::{App, Arg, crate_authors, crate_description, crate_version, ArgMatches};
+use testrunner::TestrunnerError;
+use crate::testrunner::{Testrunner, TestrunnerOptions};
+
 
 fn main() {
     let cli_args = App::new("testrunner")
@@ -72,62 +75,54 @@ fn main() {
         .get_matches();
 
 
-    let config = read_to_string(cli_args.value_of("config").unwrap())
-        .expect(&format!("Cannot open or read config file: {}", cli_args.value_of("config").unwrap()));
+    match run(cli_args) {
+        Ok(()) => (),
+        Err(err) => {
+            eprintln!("Error: {}", err.to_string());
+            std::process::exit(2);
+        },
+    }
+}
+
+fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
     let diff_delim = match cli_args.value_of("diff_mode").unwrap() {
         "char" => "",
         "c" => "",
         "word" => " ",
         "w" => " ",
         _ => "\n",
+    }.to_owned();
+
+    let options = TestrunnerOptions {
+        verbose: cli_args.is_present("verbose"),
+        diff_delim: diff_delim,
+        protected_mode: cli_args.occurrences_of("prot-html") > 0,
+        ws_hints: cli_args.occurrences_of("no-wshints") == 0,
+        sudo: cli_args.value_of("sudo").map(|e| e.to_string()),
     };
 
-    let mut generator = TestcaseGenerator::from_string(&config).expect("Could not parse config file!");
-    generator.set_verbosity(cli_args.is_present("verbose"));
-    generator.set_diff_delimiter(diff_delim.to_string());
-    generator.set_protected_mode(cli_args.occurrences_of("prot-html") > 0);
-    generator.set_whitespace_hinting(cli_args.occurrences_of("no-wshints") == 0);
-    if cli_args.is_present("sudo") {
-        generator.set_sudo(cli_args.value_of("sudo"));
-    }
-
-    match generator.generate_generateables() {
-        Ok(_) => println!("Done generating"),
-        Err(e) => eprintln!("Error generating:\n{}", e),
-    };
-
-    match generator.run_generateables() {
-        Ok(_) => {
-            println!("\nDone testing");
-            println!("Passed testcases: {} / {}", generator.testresults.iter().filter(|test| test.passed).count(), generator.testresults.len());
-        },
-        Err(e) => eprintln!("Error running:\n{}", e),
-    };
-
+    let mut runner = Testrunner::from_file(cli_args.value_of("config").unwrap(), options)?;
+    runner.run_tests()?;
 
     if let Some(html_out) = cli_args.value_of("html") {
         if html_out != "NONE" {
-            let output = generator
-                .make_html_report(diff_delim, false)
-                .expect("Failed generating HTML report!");
+            let output = runner.generate_html_report(false)?;
             write(html_out, output).expect("Cannot write HTML report to file!");
         }
     }
 
     if cli_args.occurrences_of("prot-html") > 0 {
         let prot_html_out = cli_args.value_of("prot-html").unwrap();
-        let output = generator
-            .make_html_report(diff_delim, true)
-            .expect("Failed generating HTML report!");
+        let output = runner.generate_html_report(true)?;
         write(prot_html_out, output).expect("Cannot write HTML report to file!");
     }
 
     if cli_args.occurrences_of("json") > 0 {
         let json_out = cli_args.value_of("json").unwrap();
-        let output = generator
-            .make_json_report()
-            .expect("Failed generating JSON report!");
+        let output = runner.generate_json_report()?;
         write(json_out, output).expect("Cannot write JSON report to file!");
     }
+
+    Ok(())
 }
 

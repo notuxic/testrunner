@@ -1,19 +1,25 @@
 use std::clone::Clone;
 use std::fs::{copy, File, remove_dir_all, remove_file};
 use std::io::{self, BufRead, BufReader, Write};
+use std::sync::Weak;
 use std::time::{Duration, Instant};
+
 use difference::{Changeset, Difference};
 use regex::Regex;
+use serde::{Deserializer, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
-use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, parse_vg_log, percentage_from_levenstein};
-use super::test::{DiffKind, Test, TestCaseKind, TestMeta};
-use super::testcase::Testcase;
-use super::testresult::TestResult;
-use crate::project::binary::{Binary, GenerationError};
+
+use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
+use crate::testresult::ordio_testresult::OrdIoTestresult;
+use crate::testresult::testresult::Testresult;
+use crate::testrunner::{TestrunnerError, TestrunnerOptions};
+use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, parse_vg_log, percentage_from_levenstein};
+use super::test::{Test, TestMeta, TestcaseType, TestingError};
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum InputOutput {
     Input(String),
     Output(String),
@@ -49,94 +55,70 @@ impl InputOutput {
     }
 }
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct OrdIoTest {
+    #[serde(flatten)]
     meta: TestMeta,
-    binary: Binary,
-    io_file: String,
+    #[serde(skip)]
+    project_definition: Weak<ProjectDefinition>,
+    #[serde(skip)]
+    options: Weak<TestrunnerOptions>,
+    #[serde(skip)]
+    binary: Weak<Binary>,
+    #[serde(skip)]
     io: Vec<InputOutput>,
+    #[serde(skip_serializing, deserialize_with = "OrdIoTest::deserialize_regex")]
     io_prompt: Regex,
+    io_file: String,
     argv: Vec<String>,
     exp_retvar: Option<i32>,
-    env_vars: Option<String>,
+    env_vars: Option<Vec<String>>,
 }
 
 
 impl Test for OrdIoTest {
-    fn get_test_meta(&self) -> &TestMeta { &self.meta }
-
-    fn from_saved_tc(
-        number: i32,
-        testcase: &Testcase,
-        projdef: &ProjectDefinition,
-        binary: Option<&Binary>,
-    ) -> Result<Self, GenerationError> {
-        match binary {
-            Some(_) => {}
-            None => {
-                return Err(GenerationError::BinaryRequired);
-            }
-        };
-        let add_diff_kind = match &testcase.add_diff_mode {
-            Some(text) => {
-                if text.eq_ignore_ascii_case("binary") {
-                    DiffKind::Binary
-                }
-                else {
-                    DiffKind::PlainText
-                }
-            },
-            None => DiffKind::PlainText,
-        };
-        let meta = TestMeta {
-            kind: TestCaseKind::OrdIOTest,
-            add_diff_kind,
-            add_out_file: testcase.add_out_file.clone(),
-            add_exp_file: testcase.add_exp_file.clone(),
-            number,
-            name: testcase.name.clone(),
-            desc: testcase.description.clone(),
-            projdef: projdef.clone(),
-            timeout: testcase.timeout,
-            protected: testcase.protected.unwrap_or(false),
-        };
-
-        let test = OrdIoTest {
-            meta,
-            binary: binary.unwrap().clone(),
-            exp_retvar: testcase.exp_retvar,
-            argv: testcase.args.as_ref().unwrap_or(&vec![String::new()]).clone(),
-            env_vars: testcase.env_vars.clone(),
-            io_file: testcase.io_file.as_ref().unwrap_or(&String::new()).clone(),
-            io: OrdIoTest::parse_io_file(testcase.io_file.as_ref().unwrap())?,
-            io_prompt: Regex::new(&format!("(?m){}", testcase.io_prompt.as_ref().unwrap())).unwrap(),
-        };
-        Ok(test)
+    fn init(&mut self, number: i32, project_definition: Weak<ProjectDefinition>, options: Weak<TestrunnerOptions>, binary: Weak<Binary>) -> Result<(), TestrunnerError> {
+        self.meta.number = number;
+        self.project_definition = project_definition;
+        self.options = options;
+        self.binary = binary;
+        self.io = OrdIoTest::parse_io_file(&self.io_file)?;
+        Ok(())
     }
 
-    fn run(&self) -> Result<TestResult, GenerationError> {
-        if self.meta.projdef.protected_mode && self.meta.protected {
+    fn get_test_meta(&self) -> &TestMeta { &self.meta }
+
+    fn type_id(&self) -> &'static str {
+        return "OrdIO";
+    }
+
+    fn deserialize_trait<'de, D: ?Sized>(deserializer: &mut dyn erased_serde::Deserializer<'de>) -> Result<Box<dyn Test + Send + Sync>, erased_serde::Error>
+        where Self: Sized
+    {
+        Ok(Box::new(OrdIoTest::deserialize(deserializer)?))
+    }
+
+    fn run(&self) -> Result<Box<dyn Testresult + Send + Sync>, TestingError> {
+        let options = self.options.upgrade().unwrap();
+        let project_definition = self.project_definition.upgrade().unwrap();
+
+        if options.protected_mode && self.meta.protected {
             println!("\nStarting testcase {}: ********", self.meta.number);
         }
         else {
             println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
         }
 
-        let basedir = self.meta.projdef.makefile_path.clone().unwrap_or(String::from("."));
-        let (vg_log_folder, vg_filepath) = prepare_valgrind(&self.meta, &basedir);
-        let (cmd_name, flags) = prepare_cmdline(&self.meta, &vg_filepath)?;
+        let basedir = project_definition.makefile_path.clone().unwrap_or(".".to_owned());
+        let (vg_log_folder, vg_filepath) = prepare_valgrind(&project_definition, &options, &self.meta, &basedir);
+        let (cmd_name, flags) = prepare_cmdline(&project_definition, &options, &vg_filepath)?;
         let env_vars = prepare_envvars(self.env_vars.as_ref());
 
-        let global_timeout = self.meta.projdef.global_timeout.unwrap_or(5);
+        let global_timeout = project_definition.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
         let starttime = Instant::now();
-        let (mut io, retvar) = match self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout) {
-            Ok((io, retvar)) => (io, retvar),
-            Err(err) => {
-                eprintln!("Error talking to executable:\n{:?}", err);
-                return Err(GenerationError::ConfigErrorIO);
-            }
-        };
+        let (mut io, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
         let endtime = Instant::now();
 
         println!("Got output from testcase {}", self.meta.number);
@@ -183,7 +165,7 @@ impl Test for OrdIoTest {
                         InputOutput::Input(input) => IODiff::Input(input.to_string()),
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
-                            let changeset = Changeset::new(output, &io_e.clone().unwrap(), &self.meta.projdef.diff_delim);
+                            let changeset = Changeset::new(output, &io_e.clone().unwrap(), &options.diff_delim);
                             distances.push(percentage_from_levenstein(
                                     changeset.distance,
                                     output.len(),
@@ -203,7 +185,7 @@ impl Test for OrdIoTest {
                         InputOutput::Input(input) => IODiff::InputUnsent(input.to_string()),
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
-                            let changeset = Changeset::new(output, "", &self.meta.projdef.diff_delim);
+                            let changeset = Changeset::new(output, "", &options.diff_delim);
                             distances.push(percentage_from_levenstein(
                                     changeset.distance,
                                     output.len(),
@@ -222,29 +204,29 @@ impl Test for OrdIoTest {
             io_diff.push(diff_e);
         }
         if io_mismatch {
-            return Err(GenerationError::IOMismatch);
+            return Err(TestingError::IOMismatch);
         }
         let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
 
-        let add_diff = self.get_add_diff();
+        let add_diff = self.get_add_diff(&options);
         let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
-            && distance >= 1.0 && add_diff.as_ref().unwrap_or(&(String::from(""), 0, 0.0)).1 == 0 && !had_timeout; //TODO check if there are not diffs
+            && distance >= 1.0 && add_diff.as_ref().unwrap_or(&("".to_owned(), 0, 0.0)).1 == 0 && !had_timeout;
 
         let input = self.io.iter().map(|e| {
             match e {
                 InputOutput::Input(input) => input.clone(),
-                _ => "".to_string(),
+                _ => "".to_owned(),
             }
         }).collect::<Vec<String>>().join("");
 
         let output = io.iter().map(|e| {
             match e {
                 InputOutput::Output(output) => output.clone(),
-                _ => "".to_string(),
+                _ => "".to_owned(),
             }
         }).collect::<Vec<String>>().join("");
 
-        if self.meta.projdef.verbose && distance < 0.9999
+        if options.verbose && distance < 0.9999
         {
             println!("Diff-Distance: {:?}", distance);
             println!("------ START Reference ------");
@@ -281,18 +263,18 @@ impl Test for OrdIoTest {
                                 Difference::Same(ref z)=>
                                 {
                                     colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z) ).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
                                 }
                                 Difference::Rem(ref z) =>
                                 {
                                     colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
                                     colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
                                 }
 
                             }
@@ -306,18 +288,18 @@ impl Test for OrdIoTest {
                                 Difference::Same(ref z)=>
                                 {
                                     colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z) ).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
                                 }
                                 Difference::Rem(ref z) =>
                                 {
                                     colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
                                 }
 
                                 Difference::Add(ref z) =>
                                 {
                                     colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)  ).unwrap();
+                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
                                 }
 
                             }
@@ -329,7 +311,7 @@ impl Test for OrdIoTest {
             colored_stdout.reset().unwrap();
         }
 
-        if cfg!(unix) && self.meta.projdef.sudo.is_some() {
+        if cfg!(unix) && options.sudo.is_some() {
             match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
                 Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
                 Err(_) => (),
@@ -338,12 +320,12 @@ impl Test for OrdIoTest {
         let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
         println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
-        if cfg!(unix) && self.meta.projdef.sudo.is_some() && self.meta.protected {
+        if cfg!(unix) && options.sudo.is_some() && self.meta.protected {
             remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or(());
         }
         let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number);
 
-        if self.meta.projdef.protected_mode && self.meta.protected {
+        if options.protected_mode && self.meta.protected {
             println!("Finished testcase {}: ********", self.meta.number);
         }
         else {
@@ -351,13 +333,11 @@ impl Test for OrdIoTest {
         }
 
 
-        Ok(TestResult {
-            diff: None,
+        Ok(Box::new(OrdIoTestresult {
             io_diff: Some(io_diff),
             add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
             truncated_output,
-            implemented: None,
             passed,
             output,
             ret: retvar,
@@ -365,22 +345,31 @@ impl Test for OrdIoTest {
             mem_leaks: valgrind.0,
             mem_errors: valgrind.1,
             mem_logfile: vg_filepath,
-            command_used: String::from(format!("./{} {}", &self.meta.projdef.binary_path, &self.argv.clone().join(" "))),
+            command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
             input,
             timeout: had_timeout,
             name: self.meta.name.clone(),
-            description: self.meta.desc.clone().unwrap_or(String::from("")),
+            description: self.meta.description.clone().unwrap_or("".to_owned()),
             number: self.meta.number,
-            kind: self.meta.kind,
+            kind: TestcaseType::OrdIOTest,
             distance_percentage: Some(distance),
             protected: self.meta.protected,
-        })
+            options: self.options.clone(),
+            project_definition: self.project_definition.clone(),
+        }))
     }
 }
 
 impl OrdIoTest {
-    fn parse_io_file(path: &str) -> Result<Vec<InputOutput>, GenerationError> {
-        let file = File::open(&path).map_err(|_| GenerationError::ConfigErrorIO)?;
+
+    fn deserialize_regex<'de, D>(deserializer: D) -> Result<Regex, D::Error>
+        where D: Deserializer<'de>
+    {
+        return Ok(Regex::new(&format!("(?m){}", &String::deserialize(deserializer)?)).unwrap());
+    }
+
+    fn parse_io_file(path: &str) -> Result<Vec<InputOutput>, TestingError> {
+        let file = File::open(&path).map_err(|_| TestingError::IoConfigNotFound(path.to_string()))?;
         let reader = BufReader::new(file);
 
         Ok(reader.lines().fold(Vec::<InputOutput>::new(), |mut acc, e| {
@@ -426,7 +415,7 @@ impl OrdIoTest {
                 }
                 else {
                     if curr_io.is_input() {
-                        acc.push(InputOutput::Output("".to_string()));
+                        acc.push(InputOutput::Output("".to_owned()));
                     }
                     acc.push(curr_io);
                 }
@@ -436,13 +425,15 @@ impl OrdIoTest {
     }
 
     fn run_command_with_timeout(&self, command: &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout: u64)-> Result<(Vec<InputOutput>, Option<i32>), io::Error> {
+        let project_definition = self.project_definition.upgrade().unwrap();
+
         let timeout = Duration::from_secs(timeout);
         let mut has_finished = false;
         let mut ref_io = self.io.iter();
         let mut io: Vec<InputOutput> = Vec::with_capacity(self.io.len());
 
         let mut cmd = subprocess::Exec::cmd(command)
-            .cwd(self.meta.projdef.makefile_path.as_ref().unwrap_or(&String::from("./")))
+            .cwd(project_definition.makefile_path.as_ref().unwrap_or(&"./".to_owned()))
             .args(args)
             .args(&self.argv)
             .stdin(subprocess::Redirection::Pipe)
@@ -484,7 +475,7 @@ impl OrdIoTest {
                 },
                 InputOutput::Output(_) => {
                     let mut output;
-                    output = String::from("");
+                    output = "".to_owned();
                     loop {
                         let result = communicator.read();
                         match result {
