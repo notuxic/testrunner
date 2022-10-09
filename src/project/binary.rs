@@ -13,8 +13,6 @@ use super::definition::ProjectDefinition;
 pub enum CompileError {
     #[error("binary not found: {0}")]
     BinaryNotFound(String),
-    #[error("compilation failed!")]
-    CompilationFailed,
     #[error("no Makefile found at: {0}")]
     MakefileNotFound(String),
     #[error("calling `make` failed: {}", .0.to_string())]
@@ -71,22 +69,18 @@ impl Binary {
         make_cmd.stdout(Stdio::piped());
         make_cmd.args(project_definition.make_targets.clone().unwrap_or(vec![]));
 
-        let compiled: bool;
-        let errors: Option<String> = None;
         let mut warnings: Option<HashMap<String, i32>> = None;
-
         match make_cmd.output() {
             Ok(res) => {
-                let errorstring = String::from_utf8(res.stderr).unwrap_or_default();
+                let errors = String::from_utf8(res.stderr).unwrap_or_default();
                 let re_warnings = Regex::new(r"warning: .*? \[-W(?P<warn>[^\]]+)\]").unwrap();
                 if res.status.code().unwrap_or(-1) != 0 {
-                    Err(CompileError::CompilationFailed)
+                    Ok(CompilationInfo{ compiled: false, errors: Some(errors), warnings })
                 }
                 else {
-                    compiled = true;
                     //checking for warnings...
                     let mut warns = HashMap::<String, i32>::new();
-                    for cap in re_warnings.captures_iter(&errorstring) {
+                    for cap in re_warnings.captures_iter(&errors) {
                         let warn = String::from(&cap["warn"]);
                         let entry = warns.entry(warn).or_insert(0);
                         *entry += 1;
@@ -98,7 +92,7 @@ impl Binary {
                         }
                         warnings = Some(warns);
                     }
-                    Ok(CompilationInfo { compiled, errors, warnings })
+                    Ok(CompilationInfo { compiled: true, errors: None, warnings })
                 }
             }
             Err(err) => {

@@ -90,6 +90,11 @@ impl Testrunner {
     }
 
     pub fn run_tests(&mut self) -> Result<(), TestrunnerError> {
+        if !self.binary.info.compiled {
+            println!("Compilation failed, skipping tests!");
+            return Ok(());
+        }
+
         self.testresults = match self.testcases.iter().try_fold(Vec::with_capacity(self.testcases.len()), |mut acc, tc| {
             acc.push(tc.run()?);
             Ok(acc)
