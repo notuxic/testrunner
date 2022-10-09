@@ -70,6 +70,7 @@ pub struct OrdIoTest {
     #[serde(skip_serializing, deserialize_with = "OrdIoTest::deserialize_regex")]
     io_prompt: Regex,
     io_file: String,
+    #[serde(default)]
     argv: Vec<String>,
     exp_retvar: Option<i32>,
     env_vars: Option<Vec<String>>,

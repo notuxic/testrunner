@@ -117,9 +117,7 @@ pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i3
 }
 
 pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, TestrunnerError> {
-    let line_end = if compare_mode == "\n" { "\n" } else { "" };
-
-    let retvar = format!(
+    Ok(format!(
         "{}",
         box_html! {
             div(id="diff") {
@@ -130,7 +128,31 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
 
                         let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
 
-                        for c in &changes.diffs {
+                        let mut it = changes.diffs.iter().peekable();
+                        while let Some(c) = it.next() {
+                            let next_is_empty;
+                            if let Some(next) = it.peek() {
+                                next_is_empty = match next {
+                                    Difference::Same(ref z) => { z.is_empty() },
+                                    Difference::Rem(ref z) => { z.is_empty() },
+                                    Difference::Add(ref z) => { z.is_empty() },
+                                };
+                            }
+                            else {
+                                next_is_empty = match *c {
+                                    Difference::Same(_) => true,
+                                    _ => false,
+                                };
+                            }
+
+                            let line_end;
+                            if next_is_empty {
+                                line_end = "";
+                            }
+                            else {
+                                line_end = if compare_mode == "\n" { "\n" } else { "" };
+                            }
+
                             match *c {
                                 Difference::Same(ref z)=>
                                 {
@@ -182,8 +204,7 @@ pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints:
                     }
                 }
             }
-    });
-    Ok(String::from(retvar))
+    }))
 }
 
 pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, TestrunnerError> {
