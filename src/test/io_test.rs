@@ -32,10 +32,15 @@ pub struct IoTest {
     options: Weak<TestrunnerOptions>,
     #[serde(skip)]
     binary: Weak<Binary>,
+    #[serde(default)]
     in_file: String,
+    #[serde(default)]
     exp_file: String,
+    #[serde(default)]
     in_string: String,
+    #[serde(default)]
     exp_string: String,
+    #[serde(default)]
     argv: Vec<String>,
     exp_retvar: Option<i32>,
     env_vars: Option<Vec<String>>,
