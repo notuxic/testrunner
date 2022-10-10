@@ -47,10 +47,10 @@ impl InputOutput {
         }
     }
 
-    fn unwrap(self) -> String {
+    fn get_ref(&self) -> &String {
         match self {
-            InputOutput::Input(s) => s,
-            InputOutput::Output(s) => s,
+            InputOutput::Input(s) => &s,
+            InputOutput::Output(s) => &s,
         }
     }
 }
@@ -129,7 +129,7 @@ impl Test for OrdIoTest {
         let mut truncated_output = false;
         let ref_output_len = match self.io.iter().rev().rfind(|io_e| io_e.is_output()) {
             Some(io_e) => {
-                io_e.clone().unwrap().chars().count()
+                io_e.get_ref().chars().count()
             },
             None => { 256 },
         };
@@ -166,11 +166,11 @@ impl Test for OrdIoTest {
                         InputOutput::Input(input) => IODiff::Input(input.to_string()),
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
-                            let changeset = Changeset::new(output, &io_e.clone().unwrap(), &options.diff_delim);
+                            let changeset = Changeset::new(output, io_e.get_ref(), &options.diff_delim);
                             distances.push(percentage_from_levenstein(
                                     changeset.distance,
                                     output.len(),
-                                    io_e.clone().unwrap().len()
+                                    io_e.get_ref().len()
                             ) * output.len() as f32);
                             if output.chars().last().unwrap() == '\n' {
                                 IODiff::Output(changeset)
@@ -451,7 +451,7 @@ impl OrdIoTest {
             .limit_time(Duration::from_millis(250));
 
         // check for some initial unexpected output
-        if curr_io.clone().unwrap().is_empty() {
+        if curr_io.get_ref().is_empty() {
             let result = communicator.read();
             match result {
                 Ok(comm) => {
@@ -475,8 +475,7 @@ impl OrdIoTest {
                     stdin.flush()?;
                 },
                 InputOutput::Output(_) => {
-                    let mut output;
-                    output = "".to_owned();
+                    let mut output = String::with_capacity(self.io.iter().filter(|e| e.is_output()).fold(0, |acc, e| acc + e.get_ref().len()));
                     loop {
                         let result = communicator.read();
                         match result {
