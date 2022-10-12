@@ -1,13 +1,12 @@
 use std::sync::Weak;
 
-use difference::Changeset;
 use horrorshow::Raw;
 use regex::Regex;
 use serde_derive::Serialize;
 use serde_json::json;
 
 use crate::project::definition::ProjectDefinition;
-use crate::test::diff::changeset_to_html;
+use crate::test::diff::{ChangesetInline, textdiff_to_html};
 use crate::test::test::TestcaseType;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::testresult::Testresult;
@@ -20,11 +19,10 @@ pub struct IoTestresult {
     pub name: String,
     pub description: String,
     pub protected: bool,
-    #[serde(skip)]
-    pub diff: Option<Changeset>,
+    pub diff: Vec<ChangesetInline<String>>,
+    pub diff_distance: f32,
     #[serde(skip)]
     pub add_diff: Option<String>,
-    pub distance_percentage: Option<f32>,
     pub add_distance_percentage: Option<f32>,
     pub truncated_output: bool,
     pub mem_leaks: i32,
@@ -36,7 +34,6 @@ pub struct IoTestresult {
     pub exp_ret: Option<i32>,
     pub passed: bool,
     pub input: String,
-    pub output: String, // thought about any type?
     #[serde(skip)]
     pub project_definition: Weak<ProjectDefinition>,
     #[serde(skip)]
@@ -61,14 +58,13 @@ impl Testresult for IoTestresult {
             "name": self.name,
             "kind": format!("{}",self.kind),
             "passed": self.passed,
-            "distance": self.distance_percentage.unwrap_or(-1.0),
+            "distance": self.diff_distance,
             "add_distance": self.add_distance_percentage.unwrap_or(-1.0),
             "statuscode": self.ret.unwrap_or(0),
-            //"diff": format!("{}",self.diff.as_ref().unwrap_or(&Changeset::new("","",""))),
+            "diff": self.diff,
             "mem_leaks": self.mem_leaks,
             "mem_errors": self.mem_errors,
             "timeout": self.timeout,
-            "output": self.output.clone(),
             "protected" : self.protected,
         }))
     }
@@ -99,11 +95,9 @@ impl Testresult for IoTestresult {
                             td {:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                         }
 
-                        @ if self.distance_percentage.is_some(){
-                            tr {
-                                th {:"Output-Diff"}
-                                td {:format!("{}%", (self.distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
-                            }
+                        tr {
+                            th {:"Output-Diff"}
+                            td {:format!("{}%", (self.diff_distance * 1000.0).floor() / 10.0)}
                         }
 
                         @ if self.add_distance_percentage.is_some(){
@@ -146,10 +140,12 @@ impl Testresult for IoTestresult {
                         }
                     }
 
-
-                    @ if self.diff.is_some() {
-                        |templ| {
-                            &mut *templ << Raw(changeset_to_html(&self.diff.as_ref().unwrap(), &options.diff_delim, options.ws_hints, "Output").unwrap_or(r"<div>Error cannot get changelist</div>".to_owned()));
+                    div(id="diff") {
+                        table(id="differences") {
+                            |templ| {
+                                let (diff_left, diff_right) = textdiff_to_html(&self.diff, options.ws_hints).unwrap();
+                                &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
+                            }
                         }
                     }
 
@@ -162,29 +158,27 @@ impl Testresult for IoTestresult {
                     @ if !self.input.is_empty() {
                         |templ| {
                             let options = options.clone();
-                            if self.diff.is_some() {
-                                &mut *templ << Raw(format!(
-                                        "{}",
-                                        box_html! {
-                                            div(id="args") {
-                                                table(id="differences") {
-                                                    |templ| {
-                                                        let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
-                                                        if options.ws_hints {
-                                                            &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                                    re.replace_all(&self.input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>")
-                                                                    .replace("\n", "&#x21b5;<br />")
-                                                                    .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
-                                                        }
-                                                        else {
-                                                            &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
-                                                                    self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
-                                                        }
+                            &mut *templ << Raw(format!(
+                                    "{}",
+                                    box_html! {
+                                        div(id="args") {
+                                            table(id="differences") {
+                                                |templ| {
+                                                    let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
+                                                    if options.ws_hints {
+                                                        &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                                re.replace_all(&self.input.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"), "<span class=\"whitespace-hint\">${m}</span>")
+                                                                .replace("\n", "&#x21b5;<br />")
+                                                                .replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")));
+                                                    }
+                                                    else {
+                                                        &mut *templ << Raw(format!("<tr><th>Testcase Input</th></tr><tr><td id=\"orig\">{}</td></tr>",
+                                                                self.input.replace(" ", "&nbsp;").replace("\n", "<br />").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;").replace("<", "&lt;").replace(">", "&gt;")));
                                                     }
                                                 }
                                             }
-                                        }));
-                            }
+                                        }
+                                    }));
                         }
                     }
                 }
@@ -196,10 +190,10 @@ impl Testresult for IoTestresult {
     fn get_html_entry_summary(&self, protected_mode: bool) -> Result<String, TestrunnerError> {
         let name = self.name.replace("\"", "");
         let distance = if self.add_distance_percentage.is_some() {
-            (self.distance_percentage.unwrap_or(-1.0) + self.add_distance_percentage.unwrap_or(-1.0)) / 2.0
+            (self.diff_distance + self.add_distance_percentage.unwrap_or(-1.0)) / 2.0
         }
         else {
-            self.distance_percentage.unwrap_or(-1.0)
+            self.diff_distance
         };
 
         let retvar = box_html! {

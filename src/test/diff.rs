@@ -1,9 +1,162 @@
+use std::time::{Duration, Instant};
+
 use difference::{Changeset, Difference};
 use horrorshow::Raw;
 use regex::Regex;
+use serde_derive::Serialize;
+use similar::{Algorithm, ChangeTag, TextDiff, capture_diff_slices_deadline, get_diff_ratio};
 
 use crate::testrunner::TestrunnerError;
 use super::ordio_test::IODiff;
+
+
+#[derive(Debug, Serialize)]
+pub enum ChangesetFlat<T> {
+    Same(T),
+    Add(T),
+    Remove(T),
+}
+
+#[derive(Debug, Serialize)]
+pub enum ChangesetInline<T> {
+    Same(Vec<ChangesetFlat<T>>),
+    Add(Vec<ChangesetFlat<T>>),
+    Remove(Vec<ChangesetFlat<T>>),
+}
+
+
+pub fn diff_plaintext(old: &str, new: &str, timeout: Duration) -> (Vec<ChangesetInline<String>>, f32) {
+    let diff = TextDiff::configure()
+        .algorithm(Algorithm::Patience)
+        .timeout(timeout)
+        .newline_terminated(true)
+        .diff_lines(old, new);
+
+    let mut changeset = Vec::with_capacity(diff.ops().len());
+    diff.ops().iter().for_each(|op| {
+        let mut changes = diff.iter_inline_changes(op).map(|change| {
+            match change.tag() {
+                ChangeTag::Equal => {
+                    ChangesetInline::Same(change.iter_strings_lossy().map(|(_, value)| {
+                        ChangesetFlat::Same(value.to_string())
+                    }).collect::<Vec<ChangesetFlat<String>>>())
+                },
+                ChangeTag::Delete => {
+                    ChangesetInline::Remove(change.iter_strings_lossy().map(|(emph, value)| {
+                        if emph {
+                            ChangesetFlat::Remove(value.to_string())
+                        }
+                        else {
+                            ChangesetFlat::Same(value.to_string())
+                        }
+                    }).collect::<Vec<ChangesetFlat<String>>>())
+                },
+                ChangeTag::Insert => {
+                    ChangesetInline::Add(change.iter_strings_lossy().map(|(emph, value)| {
+                        if emph {
+                            ChangesetFlat::Add(value.to_string())
+                        }
+                        else {
+                            ChangesetFlat::Same(value.to_string())
+                        }
+                    }).collect::<Vec<ChangesetFlat<String>>>())
+                },
+            }
+        }).collect::<Vec<ChangesetInline<String>>>();
+        changeset.append(&mut changes);
+    });
+
+    (changeset, diff.ratio())
+}
+
+pub fn diff_binary(old: &[u8], new: &[u8], timeout: Duration) -> (Vec<ChangesetFlat<u8>>, f32) {
+    let diff = capture_diff_slices_deadline(
+        Algorithm::Patience,
+        old,
+        new,
+        Some(Instant::now() + timeout)
+    );
+
+    let changeset = diff.iter()
+        .flat_map(|op| op.iter_changes(old, new))
+        .map(|change| {
+            match change.tag() {
+                ChangeTag::Equal => ChangesetFlat::Same(change.value()),
+                ChangeTag::Delete => ChangesetFlat::Remove(change.value()),
+                ChangeTag::Insert => ChangesetFlat::Add(change.value()),
+            }
+        }).collect();
+
+    (changeset, get_diff_ratio(&diff, old.len(), new.len()))
+}
+
+fn with_ws_hints(text: &str, ws_hints: bool) -> String {
+    if ws_hints {
+        let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
+        re.replace_all(
+            &text.replace(" ", "&middot;"),
+            "<span class=\"whitespace-hint\">${m}</span>"
+            ).replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")
+    }
+    else {
+        text.replace(" ", "&nbsp;")
+            .replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")
+    }
+}
+
+pub fn textdiff_to_html(changeset: &Vec<ChangesetInline<String>>, ws_hints: bool) -> Result<(String, String), TestrunnerError> {
+    let mut diff_left = String::new();
+    let mut diff_right = String::new();
+
+    changeset.iter().for_each(|change| {
+        match change {
+            ChangesetInline::Same(line) => {
+                line.iter().for_each(|segment| {
+                    match segment {
+                        ChangesetFlat::Same(text) => {
+                            diff_left.push_str(&with_ws_hints(text, ws_hints));
+                            diff_right.push_str(&with_ws_hints(text, ws_hints));
+                        },
+                        _ => {}, // ChangesetInline::Same only contains ChangesetFlat::Same
+                    }
+                });
+            },
+            ChangesetInline::Remove(line) => {
+                diff_left.push_str("<span id=\"diff-add\">");
+                line.iter().for_each(|segment| {
+                    match segment {
+                        ChangesetFlat::Same(text) => diff_left.push_str(&with_ws_hints(text, ws_hints)),
+                        ChangesetFlat::Remove(text) => diff_left.push_str(&format!("<span id=\"diff-add-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
+                        _ => {},
+                    }
+                });
+                diff_left.push_str("</span>");
+            },
+            ChangesetInline::Add(line) => {
+                diff_right.push_str("<span id=\"diff-remove\">");
+                line.iter().for_each(|segment| {
+                    match segment {
+                        ChangesetFlat::Same(text) => diff_right.push_str(&with_ws_hints(text, ws_hints)),
+                        ChangesetFlat::Add(text) => diff_right.push_str(&format!("<span id=\"diff-remove-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
+                        _ => {},
+                    }
+                });
+                diff_right.push_str("</span>");
+            },
+        }
+    });
+
+    if ws_hints {
+        diff_left = diff_left.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
+        diff_right = diff_right.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
+    }
+    else {
+        diff_left = diff_left.replace("\n", "<br />").replace("\0", "<br />");
+        diff_right = diff_right.replace("\n", "<br />").replace("\0", "<br />");
+    }
+
+    Ok((diff_left, diff_right))
+}
 
 fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) -> String {
     let decdata: Vec<u8> = decdata.split(' ').map(|c| c.parse::<u8>().unwrap()).collect();

@@ -255,9 +255,15 @@ impl Testrunner {
                                 border-left: 0.1em dashed #222
                             }}
                             #diff-add {{
-                                background-color: yellowgreen
+                                background-color: #9acd32b8
                             }}
                             #diff-remove {{
+                                background-color: #cd5c5cb0
+                            }}
+                            #diff-add-inline {{
+                                background-color: #87c608
+                            }}
+                            #diff-remove-inline {{
                                 background-color: IndianRed
                             }}
                             #diff-input {{

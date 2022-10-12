@@ -1,17 +1,14 @@
 use std::fs::{copy, create_dir_all, Permissions, read_to_string, remove_dir_all, remove_file, set_permissions};
-use std::io::Write;
 use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
 use std::sync::Weak;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
-use difference::{Changeset, Difference};
 use regex::Regex;
 use serde::Deserialize;
 use serde_derive::{Deserialize, Serialize};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use uuid::Uuid;
 
 use crate::project::binary::Binary;
@@ -20,6 +17,7 @@ use crate::testresult::io_testresult::IoTestresult;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::test::{Test, TestMeta, TestcaseType, TestingError};
+use super::diff::diff_plaintext;
 
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -108,54 +106,11 @@ impl Test for IoTest {
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
         // make changeset
-        let changeset = Changeset::new(&reference_output, &given_output, &options.diff_delim);
+        let (changeset, distance) = diff_plaintext(&reference_output, &given_output, Duration::from_secs(timeout));
 
-        let distance = changeset.distance;
         let add_diff = self.get_add_diff(&options);
         let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
-            && distance == 0 && add_diff.as_ref().unwrap_or(&("".to_owned(), 0, 0.0)).1 == 0 && !had_timeout;
-
-        if options.verbose && distance > 0
-        {
-            println!("Diff-Distance: {:?}", distance);
-            println!("------ START Reference ------");
-            println!("Reference Output:\n{:?}", reference_output);
-            println!("------ END Reference ------");
-            println!("------ START Yours ------");
-            println!("Your Output:\n{:?}", given_output);
-            println!("------ END Yours ------");
-
-            // prints diff with colors to terminal
-            // green = ok
-            // blue = reference (our solution)
-            // red = wrong (students solution) / too much
-            let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
-
-            for c in &changeset.diffs
-            {
-                match c
-                {
-                    Difference::Same(ref z)=>
-                    {
-                        colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-                        writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                    }
-                    Difference::Rem(ref z) =>
-                    {
-                        colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-                        writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                    }
-
-                    Difference::Add(ref z) =>
-                    {
-                        colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-                        writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                    }
-
-                }
-            }
-            colored_stdout.reset().unwrap();
-        }
+            && distance == 1.0 && add_diff.as_ref().unwrap_or(&("".to_owned(), 0, 0.0)).1 == 0 && !had_timeout;
 
         if cfg!(unix) && options.sudo.is_some() {
             match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
@@ -180,12 +135,12 @@ impl Test for IoTest {
 
 
         Ok(Box::new(IoTestresult {
-            diff: Some(changeset),
+            diff: changeset,
+            diff_distance: distance,
             add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
             add_diff: match add_diff { Some(d) => Some(d.0), None => None },
             truncated_output,
             passed,
-            output: given_output.clone(),
             ret: retvar,
             exp_ret: self.exp_retvar,
             mem_leaks: valgrind.0,
@@ -198,11 +153,6 @@ impl Test for IoTest {
             description: self.meta.description.clone().unwrap_or("".to_owned()),
             number: self.meta.number,
             kind: TestcaseType::IOTest,
-            distance_percentage: Some(percentage_from_levenstein(
-                    distance,
-                    reference_output.len(),
-                    given_output.len(),
-            )),
             protected: self.meta.protected,
             options: self.options.clone(),
             project_definition: self.project_definition.clone(),
