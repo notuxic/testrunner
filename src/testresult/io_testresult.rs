@@ -6,8 +6,8 @@ use serde_derive::Serialize;
 use serde_json::json;
 
 use crate::project::definition::ProjectDefinition;
-use crate::test::diff::{ChangesetInline, textdiff_to_html};
-use crate::test::test::TestcaseType;
+use crate::test::diff::{ChangesetInline, textdiff_to_html, binarydiff_to_html};
+use crate::test::test::{TestcaseType, Diff};
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::testresult::Testresult;
 
@@ -21,9 +21,9 @@ pub struct IoTestresult {
     pub protected: bool,
     pub diff: Vec<ChangesetInline<String>>,
     pub diff_distance: f32,
-    #[serde(skip)]
-    pub add_diff: Option<String>,
-    pub add_distance_percentage: Option<f32>,
+    pub add_diff: Option<Diff>,
+    pub add_distance: Option<f32>,
+    pub add_file_missing: bool,
     pub truncated_output: bool,
     pub mem_leaks: i32,
     pub mem_errors: i32,
@@ -59,7 +59,7 @@ impl Testresult for IoTestresult {
             "kind": format!("{}",self.kind),
             "passed": self.passed,
             "distance": self.diff_distance,
-            "add_distance": self.add_distance_percentage.unwrap_or(-1.0),
+            "add_distance": self.add_distance.unwrap_or(-1.0),
             "statuscode": self.ret.unwrap_or(0),
             "diff": self.diff,
             "mem_leaks": self.mem_leaks,
@@ -100,10 +100,10 @@ impl Testresult for IoTestresult {
                             td {:format!("{}%", (self.diff_distance * 1000.0).floor() / 10.0)}
                         }
 
-                        @ if self.add_distance_percentage.is_some(){
+                        @ if self.add_distance.is_some(){
                             tr {
                                 th {:"File-Diff"}
-                                td {:format!("{}%", (self.add_distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
+                                td {:format!("{}%", (self.add_distance.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
                             }
                         }
 
@@ -150,8 +150,23 @@ impl Testresult for IoTestresult {
                     }
 
                     @ if self.add_diff.is_some() {
-                       |templ| {
-                            &mut *templ << Raw(self.add_diff.clone().unwrap_or(r"<div>Error cannot get changelist</div>".to_owned()));
+                        div(id="diff") {
+                            table(id="differences") {
+                                |templ| {
+                                    if let Some(add_diff) = &self.add_diff {
+                                        match add_diff {
+                                            Diff::PlainText(diff, _) => {
+                                                let (diff_left, diff_right) = textdiff_to_html(&diff, options.ws_hints).unwrap();
+                                                &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
+                                            },
+                                            Diff::Binary(diff, _) => {
+                                                let (diff_left, diff_right) = binarydiff_to_html(&diff).unwrap();
+                                                &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -189,8 +204,8 @@ impl Testresult for IoTestresult {
 
     fn get_html_entry_summary(&self, protected_mode: bool) -> Result<String, TestrunnerError> {
         let name = self.name.replace("\"", "");
-        let distance = if self.add_distance_percentage.is_some() {
-            (self.diff_distance + self.add_distance_percentage.unwrap_or(-1.0)) / 2.0
+        let distance = if self.add_distance.is_some() {
+            (self.diff_distance + self.add_distance.unwrap_or(-1.0)) / 2.0
         }
         else {
             self.diff_distance

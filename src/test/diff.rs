@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use difference::{Changeset, Difference};
+use difference::Difference;
 use horrorshow::Raw;
 use regex::Regex;
 use serde_derive::Serialize;
@@ -69,7 +69,7 @@ pub fn diff_plaintext(old: &str, new: &str, timeout: Duration) -> (Vec<Changeset
     (changeset, diff.ratio())
 }
 
-pub fn diff_binary(old: &[u8], new: &[u8], timeout: Duration) -> (Vec<ChangesetFlat<u8>>, f32) {
+pub fn diff_binary(old: &[u8], new: &[u8], timeout: Duration) -> (Vec<ChangesetFlat<Vec<u8>>>, f32) {
     let diff = capture_diff_slices_deadline(
         Algorithm::Patience,
         old,
@@ -78,12 +78,12 @@ pub fn diff_binary(old: &[u8], new: &[u8], timeout: Duration) -> (Vec<ChangesetF
     );
 
     let changeset = diff.iter()
-        .flat_map(|op| op.iter_changes(old, new))
-        .map(|change| {
-            match change.tag() {
-                ChangeTag::Equal => ChangesetFlat::Same(change.value()),
-                ChangeTag::Delete => ChangesetFlat::Remove(change.value()),
-                ChangeTag::Insert => ChangesetFlat::Add(change.value()),
+        .flat_map(|op| op.iter_slices(old, new))
+        .map(|(tag, value)| {
+            match tag {
+                ChangeTag::Equal => ChangesetFlat::Same(Vec::from(value)),
+                ChangeTag::Delete => ChangesetFlat::Remove(Vec::from(value)),
+                ChangeTag::Insert => ChangesetFlat::Add(Vec::from(value)),
             }
         }).collect();
 
@@ -158,10 +158,9 @@ pub fn textdiff_to_html(changeset: &Vec<ChangesetInline<String>>, ws_hints: bool
     Ok((diff_left, diff_right))
 }
 
-fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) -> String {
-    let decdata: Vec<u8> = decdata.split(' ').map(|c| c.parse::<u8>().unwrap()).collect();
+fn binarydata_to_hexdump(data: &[u8], offset: &mut usize, num_lines: &mut isize) -> String {
     let mut hexdump = String::with_capacity(81);
-    for chunk in decdata.chunks(16) {
+    for chunk in data.chunks(16) {
         let hex = chunk.iter().map(|c| {
             format!("{:0>2X}", c)
         }).collect::<Vec<String>>().join(" ");
@@ -180,184 +179,66 @@ fn decdata_to_hexdump(decdata: &str, offset: &mut usize, num_lines: &mut isize) 
     hexdump
 }
 
-pub fn diff_binary_to_html(reference: &[u8], given: &[u8]) -> Result<(String, i32), TestrunnerError> {
-    let mut ref_str = String::with_capacity(reference.len() * 4);
-    let mut giv_str = String::with_capacity(given.len() * 4);
+pub fn binarydiff_to_html(changeset: &Vec<ChangesetFlat<Vec<u8>>>) -> Result<(String, String), TestrunnerError> {
+    let mut diff_left = String::new();
+    let mut diff_right = String::new();
 
-    for value in reference.iter() {
-        ref_str.push_str(&format!("{} ", value));
-    }
-    ref_str.pop();
+    let mut lines_left: isize = 0;
+    let mut lines_right: isize = 0;
+    let mut lines_carry: isize = 0;
+    let mut off_left = 0;
+    let mut off_right = 0;
 
-    for value in given.iter() {
-        giv_str.push_str(&format!("{} ", value));
-    }
-    giv_str.pop();
-
-    let changeset = Changeset::new(&giv_str ,&ref_str, " ");
-    let distance = changeset.distance;
-
-    let retvar = format!(
-        "{}",
-        box_html! {
-            div(id="diff") {
-                table(id="differences") {
-                    |templ| {
-                        let mut diffright = String::new();
-                        let mut diffleft = String::new();
-                        let mut linesright: isize = 0;
-                        let mut linesleft: isize = 0;
-                        let mut linescarry: isize = 0;
-                        let mut offleft = 0;
-                        let mut offright = 0;
-
-                        for c in &changeset.diffs {
-                            match *c {
-                                Difference::Same(ref z)=>
-                                {
-                                    if linescarry > 0 {
-                                        for _ in 0..linescarry {
-                                            diffleft.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
-                                            linesleft += 1;
-                                        }
-                                        linesright += linescarry;
-                                        linescarry = 0;
-                                    }
-
-                                    diffright.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offright, &mut linesright)));
-                                    diffleft.push_str(&format!("{}\n", decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
-                                }
-                                Difference::Rem(ref z) =>
-                                {
-                                    diffright.push_str(&format!("<span id =\"diff-remove\">{}\n</span>",
-                                            decdata_to_hexdump(z, &mut offright, &mut linesright)));
-                                    linescarry = linesright - linesleft;
-                                    linesright -= linescarry;
-                                }
-
-                                Difference::Add(ref z) =>
-                                {
-                                    diffleft.push_str(&format!("<span id =\"diff-add\">{}\n</span>",
-                                            decdata_to_hexdump(z, &mut offleft, &mut linesleft)));
-                                    linesright += linescarry;
-                                    linescarry = 0;
-                                }
-                            }
-
-                            let linesdiff = linesright - linesleft;
-                            if linesdiff > 0 {
-                                for _ in 0..linesdiff {
-                                    diffleft.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
-                                    linesleft += 1;
-                                }
-                            }
-                            else if linesdiff < 0 {
-                                let linesdiff = linesdiff * -1;
-                                for _ in 0..linesdiff {
-                                    diffright.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
-                                    linesright += 1;
-                                }
-                            }
-                        }
-
-                        &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>",
-                                diffleft, diffright));
+    changeset.iter().for_each(|change| {
+        match change {
+            ChangesetFlat::Same(block) => {
+                if lines_carry > 0 {
+                    for _ in 0..lines_carry {
+                        diff_right.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                        lines_left += 1;
                     }
+                    lines_right += lines_carry;
+                    lines_carry = 0;
                 }
+
+                diff_left.push_str(&binarydata_to_hexdump(block, &mut off_right, &mut lines_right));
+                diff_right.push_str(&binarydata_to_hexdump(block, &mut off_left, &mut lines_left));
+            },
+            ChangesetFlat::Remove(block) => {
+                diff_left.push_str("<span id=\"diff-add\">");
+                diff_left.push_str(&binarydata_to_hexdump(block, &mut off_right, &mut lines_right));
+                diff_left.push_str("</span>");
+
+                lines_carry = lines_right - lines_left;
+                lines_right -= lines_carry;
+            },
+            ChangesetFlat::Add(block) => {
+                diff_right.push_str("<span id=\"diff-remove\">");
+                diff_right.push_str(&binarydata_to_hexdump(block, &mut off_left, &mut lines_left));
+                diff_right.push_str("</span>");
+
+                lines_right += lines_carry;
+                lines_carry = 0;
             }
+        }
+
+        let lines_diff = lines_right - lines_left;
+        if lines_diff > 0 {
+            for _ in 0..lines_diff {
+                diff_right.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                lines_left += 1;
+            }
+        }
+        else if lines_diff < 0 {
+            let lines_diff = lines_diff * -1;
+            for _ in 0..lines_diff {
+                diff_left.push_str(&format!("{}&#x250a{}&#x250a{}<br>", "&nbsp;".repeat(11), "&nbsp;".repeat(51), "&nbsp;".repeat(18)));
+                lines_right += 1;
+            }
+        }
     });
-    Ok((String::from(retvar), distance))
-}
 
-pub fn changeset_to_html(changes: &Changeset, compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, TestrunnerError> {
-    Ok(format!(
-        "{}",
-        box_html! {
-            div(id="diff") {
-                table(id="differences") {
-                    |templ| {
-                        let mut diffright = String::new();
-                        let mut diffleft = String::new();
-
-                        let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
-
-                        let mut it = changes.diffs.iter().peekable();
-                        while let Some(c) = it.next() {
-                            let next_is_empty;
-                            if let Some(next) = it.peek() {
-                                next_is_empty = match next {
-                                    Difference::Same(ref z) => { z.is_empty() },
-                                    Difference::Rem(ref z) => { z.is_empty() },
-                                    Difference::Add(ref z) => { z.is_empty() },
-                                };
-                            }
-                            else {
-                                next_is_empty = match *c {
-                                    Difference::Same(_) => true,
-                                    _ => false,
-                                };
-                            }
-
-                            let line_end;
-                            if next_is_empty {
-                                line_end = "";
-                            }
-                            else {
-                                line_end = if compare_mode == "\n" { "\n" } else { "" };
-                            }
-
-                            match *c {
-                                Difference::Same(ref z)=>
-                                {
-                                    if with_ws_hints {
-                                        diffright.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
-                                                    &z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
-                                        diffleft.push_str(&format!("{}<span class=\"whitespace-hint\">{}</span>", re.replace_all(
-                                                    &z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
-                                    }
-                                    else {
-                                        diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
-                                        diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
-                                    }
-                                }
-                                Difference::Rem(ref z) =>
-                                {
-                                    if with_ws_hints {
-                                        diffright.push_str(&format!("<span id=\"diff-add\">{}<span class=\"whitespace-hint\">{}</span></span>",
-                                                re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
-                                    }
-                                    else {
-                                        diffright.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
-                                    }
-                                }
-
-                                Difference::Add(ref z) =>
-                                {
-                                    if with_ws_hints {
-                                        diffleft.push_str(&format!("<span id=\"diff-remove\">{}<span class=\"whitespace-hint\">{}</span></span>",
-                                                re.replace_all(&z.replace(" ", "&middot;"), "<span class=\"whitespace-hint\">${m}</span>").replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;"), line_end));
-                                    }
-                                    else {
-                                        diffleft.push_str(&format!("{}{}", z.replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;"), line_end));
-                                    }
-                                }
-                            }
-                        }
-
-                        if with_ws_hints {
-                            diffright = diffright.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
-                            diffleft = diffleft.replace("\n", "&#x21b5;<br />").replace("\0", "&#x2205;<br />");
-                        }
-                        else {
-                            diffright = diffright.replace("\n", "<br />").replace("\0", "<br />");
-                            diffleft = diffleft.replace("\n", "<br />").replace("\0", "<br />");
-                        }
-
-                        &mut *templ << Raw(format!("<tr><th>Reference {}</th><th>Your {}</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", source_name, source_name, diffright, diffleft));
-                    }
-                }
-            }
-    }))
+    Ok((diff_left, diff_right))
 }
 
 pub fn iodiff_to_html(changes: &[IODiff], compare_mode: &str, with_ws_hints: bool, source_name: &str) -> Result<String, TestrunnerError> {

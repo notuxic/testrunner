@@ -12,6 +12,7 @@ use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
+use crate::test::test::Diff;
 use crate::testresult::ordio_testresult::OrdIoTestresult;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
@@ -209,20 +210,35 @@ impl Test for OrdIoTest {
         }
         let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
 
-        let add_diff = self.get_add_diff(&options);
+        let add_file_missing;
+        let add_diff = match self.get_add_diff() {
+            Ok(ok) => {
+                add_file_missing = false;
+                ok
+            },
+            Err(TestingError::OutFileNotFound(_)) => {
+                add_file_missing = true;
+                None
+            },
+            Err(e) => return Err(e),
+        };
+
+        let add_distance: f32;
+        if let Some(ref diff) = add_diff {
+            match diff {
+                Diff::PlainText(_, d) => add_distance = *d,
+                Diff::Binary(_, d) => add_distance = *d,
+            }
+        }
+        else {
+            add_distance = 1.0;
+        }
         let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
-            && distance >= 1.0 && add_diff.as_ref().unwrap_or(&("".to_owned(), 0, 0.0)).1 == 0 && !had_timeout;
+            && distance == 1.0 && add_distance == 1.0 && !had_timeout;
 
         let input = self.io.iter().map(|e| {
             match e {
                 InputOutput::Input(input) => input.clone(),
-                _ => "".to_owned(),
-            }
-        }).collect::<Vec<String>>().join("");
-
-        let output = io.iter().map(|e| {
-            match e {
-                InputOutput::Output(output) => output.clone(),
                 _ => "".to_owned(),
             }
         }).collect::<Vec<String>>().join("");
@@ -335,12 +351,13 @@ impl Test for OrdIoTest {
 
 
         Ok(Box::new(OrdIoTestresult {
-            io_diff: Some(io_diff),
-            add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
-            add_diff: match add_diff { Some(d) => Some(d.0), None => None },
+            io_diff,
+            diff_distance: distance,
+            add_diff,
+            add_distance: Some(add_distance),
+            add_file_missing,
             truncated_output,
             passed,
-            output,
             ret: retvar,
             exp_ret: self.exp_retvar,
             mem_leaks: valgrind.0,
@@ -353,7 +370,6 @@ impl Test for OrdIoTest {
             description: self.meta.description.clone().unwrap_or("".to_owned()),
             number: self.meta.number,
             kind: TestcaseType::OrdIOTest,
-            distance_percentage: Some(distance),
             protected: self.meta.protected,
             options: self.options.clone(),
             project_definition: self.project_definition.clone(),

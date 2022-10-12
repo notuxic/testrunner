@@ -5,9 +5,9 @@ use serde_derive::Serialize;
 use serde_json::json;
 
 use crate::project::definition::ProjectDefinition;
-use crate::test::diff::iodiff_to_html;
+use crate::test::diff::{iodiff_to_html, textdiff_to_html, binarydiff_to_html};
 use crate::test::ordio_test::IODiff;
-use crate::test::test::TestcaseType;
+use crate::test::test::{TestcaseType, Diff};
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::testresult::Testresult;
 
@@ -19,12 +19,12 @@ pub struct OrdIoTestresult {
     pub name: String,
     pub description: String,
     pub protected: bool,
+    pub add_diff: Option<Diff>,
+    pub add_distance: Option<f32>,
+    pub add_file_missing: bool,
     #[serde(skip)]
-    pub add_diff: Option<String>,
-    #[serde(skip)]
-    pub io_diff: Option<Vec<IODiff>>,
-    pub distance_percentage: Option<f32>,
-    pub add_distance_percentage: Option<f32>,
+    pub io_diff: Vec<IODiff>,
+    pub diff_distance: f32,
     pub truncated_output: bool,
     pub mem_leaks: i32,
     pub mem_errors: i32,
@@ -35,7 +35,6 @@ pub struct OrdIoTestresult {
     pub exp_ret: Option<i32>,
     pub passed: bool,
     pub input: String,
-    pub output: String, // thought about any type?
     #[serde(skip)]
     pub project_definition: Weak<ProjectDefinition>,
     #[serde(skip)]
@@ -60,13 +59,12 @@ impl Testresult for OrdIoTestresult {
             "name": self.name,
             "kind": format!("{}",self.kind),
             "passed": self.passed,
-            "distance": self.distance_percentage.unwrap_or(-1.0),
-            "add_distance": self.add_distance_percentage.unwrap_or(-1.0),
+            "distance": self.diff_distance,
+            "add_distance": self.add_distance.unwrap_or(-1.0),
             "statuscode": self.ret.unwrap_or(0),
             "mem_leaks": self.mem_leaks,
             "mem_errors": self.mem_errors,
             "timeout": self.timeout,
-            "output": self.output.clone(),
             "protected" : self.protected,
         }))
     }
@@ -97,17 +95,15 @@ impl Testresult for OrdIoTestresult {
                             td {:Raw(format!("{}", if self.passed { "<span class=\"success\">&#x2714;</span>" } else { "<span class=\"fail\">&#x2718;</span>" }))}
                         }
 
-                        @ if self.distance_percentage.is_some(){
-                            tr {
-                                th {:"Output-Diff"}
-                                td {:format!("{}%", (self.distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
-                            }
+                        tr {
+                            th {:"Output-Diff"}
+                            td {:format!("{}%", (self.diff_distance * 1000.0).floor() / 10.0)}
                         }
 
-                        @ if self.add_distance_percentage.is_some(){
+                        @ if self.add_distance.is_some(){
                             tr {
                                 th {:"File-Diff"}
-                                td {:format!("{}%", (self.add_distance_percentage.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
+                                td {:format!("{}%", (self.add_distance.unwrap_or(0.0) * 1000.0).floor() / 10.0)}
                             }
                         }
 
@@ -144,15 +140,28 @@ impl Testresult for OrdIoTestresult {
                         }
                     }
 
-                    @ if self.io_diff.is_some() {
-                        |templ| {
-                            &mut *templ << Raw(iodiff_to_html(&self.io_diff.as_ref().unwrap(), &options.diff_delim, options.ws_hints, "Output").unwrap_or(r"<div>Error cannot get changelist</div>".to_owned()));
-                        }
+                    |templ| {
+                        &mut *templ << Raw(iodiff_to_html(&self.io_diff, &options.diff_delim, options.ws_hints, "Output").unwrap_or(r"<div>Error cannot get changelist</div>".to_owned()));
                     }
 
                     @ if self.add_diff.is_some() {
-                       |templ| {
-                            &mut *templ << Raw(self.add_diff.clone().unwrap_or(r"<div>Error cannot get changelist</div>".to_owned()));
+                        div(id="diff") {
+                            table(id="differences") {
+                                |templ| {
+                                    if let Some(add_diff) = &self.add_diff {
+                                        match add_diff {
+                                            Diff::PlainText(diff, _) => {
+                                                let (diff_left, diff_right) = textdiff_to_html(&diff, options.ws_hints).unwrap();
+                                                &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
+                                            },
+                                            Diff::Binary(diff, _) => {
+                                                let (diff_left, diff_right) = binarydiff_to_html(&diff).unwrap();
+                                                &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -163,11 +172,11 @@ impl Testresult for OrdIoTestresult {
 
     fn get_html_entry_summary(&self, protected_mode: bool) -> Result<String, TestrunnerError> {
         let name = self.name.replace("\"", "");
-        let distance = if self.add_distance_percentage.is_some() {
-            (self.distance_percentage.unwrap_or(-1.0) + self.add_distance_percentage.unwrap_or(-1.0)) / 2.0
+        let distance = if self.add_distance.is_some() {
+            (self.diff_distance + self.add_distance.unwrap_or(-1.0)) / 2.0
         }
         else {
-            self.distance_percentage.unwrap_or(-1.0)
+            self.diff_distance
         };
 
         let retvar = box_html! {

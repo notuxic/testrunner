@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
+use crate::test::test::Diff;
 use crate::testresult::io_testresult::IoTestresult;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
@@ -105,12 +106,34 @@ impl Test for IoTest {
 
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
-        // make changeset
+        // calc diff
         let (changeset, distance) = diff_plaintext(&reference_output, &given_output, Duration::from_secs(timeout));
 
-        let add_diff = self.get_add_diff(&options);
+        let add_file_missing;
+        let add_diff = match self.get_add_diff() {
+            Ok(ok) => {
+                add_file_missing = false;
+                ok
+            },
+            Err(TestingError::OutFileNotFound(_)) => {
+                add_file_missing = true;
+                None
+            },
+            Err(e) => return Err(e),
+        };
+
+        let add_distance: f32;
+        if let Some(ref diff) = add_diff {
+            match diff {
+                Diff::PlainText(_, d) => add_distance = *d,
+                Diff::Binary(_, d) => add_distance = *d,
+            }
+        }
+        else {
+            add_distance = 1.0;
+        }
         let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
-            && distance == 1.0 && add_diff.as_ref().unwrap_or(&("".to_owned(), 0, 0.0)).1 == 0 && !had_timeout;
+            && distance == 1.0 && add_distance == 1.0 && !had_timeout;
 
         if cfg!(unix) && options.sudo.is_some() {
             match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
@@ -137,8 +160,9 @@ impl Test for IoTest {
         Ok(Box::new(IoTestresult {
             diff: changeset,
             diff_distance: distance,
-            add_distance_percentage: match &add_diff { Some(d) => Some(d.2), None => None },
-            add_diff: match add_diff { Some(d) => Some(d.0), None => None },
+            add_diff,
+            add_distance: Some(add_distance),
+            add_file_missing,
             truncated_output,
             passed,
             ret: retvar,

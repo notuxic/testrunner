@@ -1,8 +1,8 @@
-use std::fs::File;
+use std::fs::{File, read_to_string};
 use std::sync::Weak;
+use std::time::Duration;
 use std::{fmt, io::Read};
 
-use difference::Changeset;
 use serde_derive::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -10,8 +10,7 @@ use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
-use super::diff::{changeset_to_html, diff_binary_to_html};
-use super::io_test::percentage_from_levenstein;
+use super::diff::{diff_plaintext, ChangesetInline, ChangesetFlat, diff_binary};
 
 
 #[derive(Debug, Error)]
@@ -24,6 +23,12 @@ pub enum TestingError {
     MissingBinDependency(String),
     #[error("i/o config not found: {0}")]
     IoConfigNotFound(String),
+    #[error("reference-file not found: {0}")]
+    RefFileNotFound(String),
+    #[error("input-file not found: {0}")]
+    InFileNotFound(String),
+    #[error("output-file not found: {0}")]
+    OutFileNotFound(String),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error("internal i/o error: i/o mismatch")]
@@ -46,7 +51,9 @@ impl fmt::Display for TestcaseType {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum DiffKind {
+    #[serde(alias = "plaintext", alias = "text")]
     PlainText,
+    #[serde(alias = "binary")]
     Binary,
 }
 
@@ -54,6 +61,12 @@ impl Default for DiffKind {
     fn default() -> DiffKind {
         DiffKind::PlainText
     }
+}
+
+#[derive(Debug, Serialize)]
+pub enum Diff {
+    PlainText(Vec<ChangesetInline<String>>, f32),
+    Binary(Vec<ChangesetFlat<Vec<u8>>>, f32),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -64,7 +77,7 @@ pub struct TestMeta {
     pub description: Option<String>,
     pub timeout: Option<u64>,
     #[serde(default)]
-    pub add_diff_kind: DiffKind,
+    pub add_diff_mode: DiffKind,
     pub add_out_file: Option<String>,
     pub add_exp_file: Option<String>,
     #[serde(default)]
@@ -84,58 +97,44 @@ pub trait Test : erased_serde::Serialize {
     fn deserialize_trait<'de, D: ?Sized>(deserializer: &mut dyn erased_serde::Deserializer<'de>) -> Result<Box<dyn Test + Send + Sync>, erased_serde::Error>
         where Self: Sized;
 
-    fn get_add_diff(&self, options: &TestrunnerOptions) -> Option<(String, i32, f32)> {
+    fn get_add_diff(&self) -> Result<Option<Diff>, TestingError> {
         let test_meta = self.get_test_meta();
 
         if test_meta.add_out_file.is_some() && test_meta.add_exp_file.is_some() {
-
-            let fd_user = File::open(test_meta.add_out_file.as_ref().unwrap());//.expect(&format!("Cannot open file `{}`", test_meta.add_out_file.as_ref().unwrap()));
-            let mut fd_ref = File::open(test_meta.add_exp_file.as_ref().unwrap()).expect(&format!("Cannot open file `{}`", test_meta.add_exp_file.as_ref().unwrap()));
-
-            let mut buf_user = Vec::<u8>::new();
-            let mut buf_ref = Vec::<u8>::new();
-
-            match fd_user {
-                Ok(_) => {
-                    match fd_user.unwrap().read_to_end(&mut buf_user) {
-                        Ok(_) => (),
-                        Err(e) => {
-                            println!("Could not read file {}.\n{}",test_meta.add_out_file.as_ref().unwrap(), e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    println!("Could not open File {}\n{}", test_meta.add_out_file.as_ref().unwrap(), e);
-                }
-            }
-
-            match fd_ref.read_to_end(&mut buf_ref) {
-                Ok(_) => (),
-                Err(e) => panic!("{}", e),
-            }
-
-
-            match test_meta.add_diff_kind {
+            match test_meta.add_diff_mode {
                 DiffKind::PlainText => {
-                    let orig = format!("{}", String::from_utf8_lossy(&buf_ref));
-                    let edit = format!("{}", String::from_utf8_lossy(&buf_user));
+                    let ref_file = read_to_string(test_meta.add_exp_file.as_ref().unwrap())
+                        .unwrap();
+                        // .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
+                    let out_file = read_to_string(test_meta.add_out_file.as_ref().unwrap())
+                        .map_err(|_| TestingError::OutFileNotFound(test_meta.add_out_file.as_ref().unwrap().clone()))?;
 
-                    let changeset = Changeset::new(&orig, &edit, &options.diff_delim);
-                    return match changeset_to_html(&changeset, &options.diff_delim, options.ws_hints, "File") {
-                        Ok(text) => Some((text, changeset.distance, percentage_from_levenstein(changeset.distance, buf_ref.len(), buf_user.len()))),
-                        Err(_) => None,
-                    }
-                }
+                    let (diff, distance) = diff_plaintext(&ref_file, &out_file, Duration::from_secs(20));
+                    Ok(Some(Diff::PlainText(diff, distance)))
+                },
                 DiffKind::Binary => {
-                    return match diff_binary_to_html(&buf_ref, &buf_user) {
-                        Ok(text) => Some((text.0, text.1, percentage_from_levenstein(text.1, buf_ref.len(), buf_user.len()))),
-                        Err(_) => None,
-                    }
-                }
+                    let mut ref_fd = File::open(test_meta.add_exp_file.as_ref().unwrap())
+                        .unwrap();
+                        // .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
+                    let mut out_fd = File::open(test_meta.add_out_file.as_ref().unwrap())
+                        .map_err(|_| TestingError::OutFileNotFound(test_meta.add_out_file.as_ref().unwrap().clone()))?;
 
+                    let mut ref_buf = Vec::<u8>::new();
+                    let mut out_buf = Vec::<u8>::new();
+                    #[allow(unused_must_use)]
+                    {
+                        ref_fd.read_to_end(&mut ref_buf);
+                        out_fd.read_to_end(&mut out_buf);
+                    }
+
+                    let (diff, distance) = diff_binary(&ref_buf, &out_buf, Duration::from_secs(20));
+                    Ok(Some(Diff::Binary(diff, distance)))
+                }
             }
-        };
-        None
+        }
+        else {
+            Ok(None)
+        }
     }
 }
 
