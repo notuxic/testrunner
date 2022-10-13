@@ -160,8 +160,8 @@ impl Test for IoTest {
         Ok(Box::new(IoTestresult {
             diff: changeset,
             diff_distance: distance,
+            add_distance: if add_diff.is_some() { Some(add_distance) } else { None },
             add_diff,
-            add_distance: Some(add_distance),
             add_file_missing,
             truncated_output,
             passed,
@@ -392,14 +392,6 @@ pub fn check_program_availability(prog: &str) -> Result<(), TestingError> {
             Ok(())
         },
         Err(_) => Err(TestingError::MissingBinDependency(prog.to_string()))
-    }
-}
-
-pub fn percentage_from_levenstein(steps: i32, source_len: usize, target_len: usize) -> f32 {
-    if (source_len == 0) || (target_len == 0) {
-        return 0.0;
-    } else {
-        return 1.0 - ((steps as f32) / (source_len as f32).max(target_len as f32));
     }
 }
 

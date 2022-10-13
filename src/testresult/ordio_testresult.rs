@@ -5,7 +5,7 @@ use serde_derive::Serialize;
 use serde_json::json;
 
 use crate::project::definition::ProjectDefinition;
-use crate::test::diff::{iodiff_to_html, textdiff_to_html, binarydiff_to_html};
+use crate::test::diff::{textdiff_to_html, binarydiff_to_html, iodiff_to_html};
 use crate::test::ordio_test::IODiff;
 use crate::test::test::{TestcaseType, Diff};
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
@@ -140,8 +140,13 @@ impl Testresult for OrdIoTestresult {
                         }
                     }
 
-                    |templ| {
-                        &mut *templ << Raw(iodiff_to_html(&self.io_diff, &options.diff_delim, options.ws_hints, "Output").unwrap_or(r"<div>Error cannot get changelist</div>".to_owned()));
+                    div(id="diff") {
+                        table(id="differences") {
+                            |templ| {
+                                let (diff_left, diff_right) = iodiff_to_html(&self.io_diff, options.ws_hints).unwrap();
+                                &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
+                            }
+                        }
                     }
 
                     @ if self.add_diff.is_some() {

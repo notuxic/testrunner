@@ -4,19 +4,19 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::sync::Weak;
 use std::time::{Duration, Instant};
 
-use difference::{Changeset, Difference};
 use regex::Regex;
 use serde::{Deserializer, Deserialize};
 use serde_derive::{Deserialize, Serialize};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
+use crate::test::diff::diff_plaintext;
 use crate::test::test::Diff;
 use crate::testresult::ordio_testresult::OrdIoTestresult;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
-use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, parse_vg_log, percentage_from_levenstein};
+use super::diff::ChangesetInline;
+use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, parse_vg_log};
 use super::test::{Test, TestMeta, TestcaseType, TestingError};
 
 
@@ -29,8 +29,7 @@ pub enum InputOutput {
 pub enum IODiff {
     Input(String),
     InputUnsent(String),
-    Output(Changeset),
-    OutputQuery(Changeset),
+    Output(Vec<ChangesetInline<String>>),
 }
 
 impl InputOutput {
@@ -149,6 +148,7 @@ impl Test for OrdIoTest {
 
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
+        // calc diff
         let mut len_ref_sum = 0;
         let mut distances = Vec::with_capacity(io.len() / 2 + 2);
         let mut io_mismatch = false;
@@ -167,18 +167,9 @@ impl Test for OrdIoTest {
                         InputOutput::Input(input) => IODiff::Input(input.to_string()),
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
-                            let changeset = Changeset::new(output, io_e.get_ref(), &options.diff_delim);
-                            distances.push(percentage_from_levenstein(
-                                    changeset.distance,
-                                    output.len(),
-                                    io_e.get_ref().len()
-                            ) * output.len() as f32);
-                            if output.chars().last().unwrap() == '\n' {
-                                IODiff::Output(changeset)
-                            }
-                            else {
-                                IODiff::OutputQuery(changeset)
-                            }
+                            let (changeset, distance) = diff_plaintext(output, io_e.get_ref(), Duration::from_secs(timeout));
+                            distances.push(distance * output.len() as f32);
+                            IODiff::Output(changeset)
                         },
                     }
                 },
@@ -187,18 +178,9 @@ impl Test for OrdIoTest {
                         InputOutput::Input(input) => IODiff::InputUnsent(input.to_string()),
                         InputOutput::Output(output) => {
                             len_ref_sum += output.len();
-                            let changeset = Changeset::new(output, "", &options.diff_delim);
-                            distances.push(percentage_from_levenstein(
-                                    changeset.distance,
-                                    output.len(),
-                                    0
-                            ) * output.len() as f32);
-                            if output.chars().last().unwrap() == '\n' {
-                                IODiff::Output(changeset)
-                            }
-                            else {
-                                IODiff::OutputQuery(changeset)
-                            }
+                            let (changeset, distance) = diff_plaintext(output, "", Duration::from_secs(timeout));
+                            distances.push(distance * output.len() as f32);
+                            IODiff::Output(changeset)
                         },
                     }
                 },
@@ -243,91 +225,6 @@ impl Test for OrdIoTest {
             }
         }).collect::<Vec<String>>().join("");
 
-        if options.verbose && distance < 0.9999
-        {
-            println!("Diff-Distance: {:?}", distance);
-            println!("------ START Reference ------");
-            println!("Reference Output:\n");
-            self.io.iter().for_each(|e| {
-                match e {
-                    InputOutput::Output(output) => println!("{}", output),
-                    _ => (),
-                }
-            });
-            println!("------ END Reference ------");
-            println!("------ START Yours ------");
-            println!("Your Output:\n");
-            io.iter().for_each(|e| {
-                match e {
-                    InputOutput::Output(output) => println!("{}", output),
-                    _ => (),
-                }
-            });
-            println!("------ END Yours ------");
-
-            // prints diff with colors to terminal
-            // green = ok
-            // blue = reference (our solution)
-            // red = wrong (students solution) / too much
-            let mut colored_stdout = StandardStream::stdout(ColorChoice::Always);
-            io_diff.iter().for_each(|e| {
-                match e {
-                    IODiff::Output(cs) => {
-                        for c in &cs.diffs
-                        {
-                            match c
-                            {
-                                Difference::Same(ref z)=>
-                                {
-                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                                }
-                                Difference::Rem(ref z) =>
-                                {
-                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                                }
-
-                                Difference::Add(ref z) =>
-                                {
-                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                                }
-
-                            }
-                        }
-                    },
-                    IODiff::OutputQuery(cs) => {
-                        for c in &cs.diffs
-                        {
-                            match c
-                            {
-                                Difference::Same(ref z)=>
-                                {
-                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                                }
-                                Difference::Rem(ref z) =>
-                                {
-                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Blue))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                                }
-
-                                Difference::Add(ref z) =>
-                                {
-                                    colored_stdout.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
-                                    writeln!(&mut colored_stdout, "{}", String::from(z)).unwrap();
-                                }
-
-                            }
-                        }
-                    },
-                    _ => (),
-                }
-            });
-            colored_stdout.reset().unwrap();
-        }
-
         if cfg!(unix) && options.sudo.is_some() {
             match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
                 Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
@@ -353,8 +250,8 @@ impl Test for OrdIoTest {
         Ok(Box::new(OrdIoTestresult {
             io_diff,
             diff_distance: distance,
+            add_distance: if add_diff.is_some() { Some(add_distance) } else { None },
             add_diff,
-            add_distance: Some(add_distance),
             add_file_missing,
             truncated_output,
             passed,
