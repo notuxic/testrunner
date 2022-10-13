@@ -34,7 +34,6 @@ pub enum TestrunnerError {
 #[derive(Debug)]
 pub struct TestrunnerOptions {
     pub verbose: bool,
-    pub diff_delim: String,
     pub protected_mode: bool,
     pub ws_hints: bool,
     pub sudo: Option<String>,
@@ -44,7 +43,6 @@ impl Default for TestrunnerOptions {
     fn default() -> Self {
         TestrunnerOptions {
             verbose: false,
-            diff_delim: "\n".to_owned(),
             protected_mode: false,
             ws_hints: true,
             sudo: None,

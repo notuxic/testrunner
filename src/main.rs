@@ -27,14 +27,6 @@ fn main() {
             .value_name("CONFIG_FILE")
             .required_unless("TESTINPUT")
             .help("set testcase config file"))
-        .arg(Arg::with_name("diff_mode")
-            .short("m")
-            .long("diff-mode")
-            .takes_value(true)
-            .value_name("DIFF_MODE")
-            .default_value("line")
-            .possible_values(&["line", "l", "word", "w", "char", "c"])
-            .help("set diff-mode. Possible values for <DIFF_MODE>:\nline : compare outputs line by line\nword : compare outputs word by word\nchar : compare outputs char by char\n"))
         .arg(Arg::with_name("no-wshints")
             .short("n")
             .long("no-ws-hints")
@@ -85,17 +77,8 @@ fn main() {
 }
 
 fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
-    let diff_delim = match cli_args.value_of("diff_mode").unwrap() {
-        "char" => "",
-        "c" => "",
-        "word" => " ",
-        "w" => " ",
-        _ => "\n",
-    }.to_owned();
-
     let options = TestrunnerOptions {
         verbose: cli_args.is_present("verbose"),
-        diff_delim: diff_delim,
         protected_mode: cli_args.occurrences_of("prot-html") > 0,
         ws_hints: cli_args.occurrences_of("no-wshints") == 0,
         sudo: cli_args.value_of("sudo").map(|e| e.to_string()),
