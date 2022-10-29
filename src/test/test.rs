@@ -104,8 +104,7 @@ pub trait Test : erased_serde::Serialize {
             match test_meta.add_diff_mode {
                 DiffKind::PlainText => {
                     let ref_file = read_to_string(test_meta.add_exp_file.as_ref().unwrap())
-                        .unwrap();
-                        // .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
+                        .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
                     let out_file = read_to_string(test_meta.add_out_file.as_ref().unwrap())
                         .map_err(|_| TestingError::OutFileNotFound(test_meta.add_out_file.as_ref().unwrap().clone()))?;
 
@@ -114,8 +113,7 @@ pub trait Test : erased_serde::Serialize {
                 },
                 DiffKind::Binary => {
                     let mut ref_fd = File::open(test_meta.add_exp_file.as_ref().unwrap())
-                        .unwrap();
-                        // .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
+                        .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
                     let mut out_fd = File::open(test_meta.add_out_file.as_ref().unwrap())
                         .map_err(|_| TestingError::OutFileNotFound(test_meta.add_out_file.as_ref().unwrap().clone()))?;
 
