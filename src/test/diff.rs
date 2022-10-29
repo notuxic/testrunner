@@ -4,7 +4,6 @@ use regex::Regex;
 use serde_derive::Serialize;
 use similar::{Algorithm, ChangeTag, TextDiff, capture_diff_slices_deadline, get_diff_ratio};
 
-use crate::testrunner::TestrunnerError;
 use super::ordio_test::IODiff;
 
 
@@ -102,7 +101,7 @@ fn with_ws_hints(text: &str, ws_hints: bool) -> String {
     }
 }
 
-pub fn textdiff_to_html(changeset: &Vec<ChangesetInline<String>>, ws_hints: bool) -> Result<(String, String), TestrunnerError> {
+pub fn textdiff_to_html(changeset: &Vec<ChangesetInline<String>>, ws_hints: bool) -> (String, String) {
     let mut diff_left = String::new();
     let mut diff_right = String::new();
 
@@ -153,7 +152,7 @@ pub fn textdiff_to_html(changeset: &Vec<ChangesetInline<String>>, ws_hints: bool
         diff_right = diff_right.replace("\n", "<br />").replace("\0", "<br />");
     }
 
-    Ok((diff_left, diff_right))
+    (diff_left, diff_right)
 }
 
 fn binarydata_to_hexdump(data: &[u8], offset: &mut usize, num_lines: &mut isize) -> String {
@@ -177,7 +176,7 @@ fn binarydata_to_hexdump(data: &[u8], offset: &mut usize, num_lines: &mut isize)
     hexdump
 }
 
-pub fn binarydiff_to_html(changeset: &Vec<ChangesetFlat<Vec<u8>>>) -> Result<(String, String), TestrunnerError> {
+pub fn binarydiff_to_html(changeset: &Vec<ChangesetFlat<Vec<u8>>>) -> (String, String) {
     let mut diff_left = String::new();
     let mut diff_right = String::new();
 
@@ -236,10 +235,10 @@ pub fn binarydiff_to_html(changeset: &Vec<ChangesetFlat<Vec<u8>>>) -> Result<(St
         }
     });
 
-    Ok((diff_left, diff_right))
+    (diff_left, diff_right)
 }
 
-pub fn iodiff_to_html(changeset: &[IODiff], ws_hints: bool) -> Result<(String, String), TestrunnerError> {
+pub fn iodiff_to_html(changeset: &[IODiff], ws_hints: bool) -> (String, String) {
     let mut diff_left = String::new();
     let mut diff_right = String::new();
 
@@ -303,6 +302,6 @@ pub fn iodiff_to_html(changeset: &[IODiff], ws_hints: bool) -> Result<(String, S
         diff_right = diff_right.replace("\n", "<br />").replace("\0", "<br />");
     }
 
-    Ok((diff_left, diff_right))
+    (diff_left, diff_right)
 }
 

@@ -143,7 +143,7 @@ impl Testresult for IoTestresult {
                     div(id="diff") {
                         table(id="differences") {
                             |templ| {
-                                let (diff_left, diff_right) = textdiff_to_html(&self.diff, options.ws_hints).unwrap();
+                                let (diff_left, diff_right) = textdiff_to_html(&self.diff, options.ws_hints);
                                 &mut *templ << Raw(format!("<tr><th>Reference Output</th><th>Your Output</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
                             }
                         }
@@ -156,11 +156,11 @@ impl Testresult for IoTestresult {
                                     if let Some(add_diff) = &self.add_diff {
                                         match add_diff {
                                             Diff::PlainText(diff, _) => {
-                                                let (diff_left, diff_right) = textdiff_to_html(&diff, options.ws_hints).unwrap();
+                                                let (diff_left, diff_right) = textdiff_to_html(&diff, options.ws_hints);
                                                 &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
                                             },
                                             Diff::Binary(diff, _) => {
-                                                let (diff_left, diff_right) = binarydiff_to_html(&diff).unwrap();
+                                                let (diff_left, diff_right) = binarydiff_to_html(&diff);
                                                 &mut *templ << Raw(format!("<tr><th>Reference File</th><th>Your File</th></tr><tr><td id=\"orig\">{}</td><td id=\"edit\">{}</td></tr>", diff_left, diff_right))
                                             }
                                         }
