@@ -1,4 +1,4 @@
-use std::fs::{File, read_to_string};
+use std::fs::{File, read_to_string, copy, remove_file, remove_dir_all};
 use std::sync::Weak;
 use std::time::Duration;
 use std::{fmt, io::Read};
@@ -8,6 +8,7 @@ use thiserror::Error;
 
 use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
+use crate::test::io_test::parse_vg_log;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::diff::{diff_plaintext, ChangesetInline, ChangesetFlat, diff_binary};
@@ -96,6 +97,64 @@ pub trait Test : erased_serde::Serialize {
 
     fn deserialize_trait<'de, D: ?Sized>(deserializer: &mut dyn erased_serde::Deserializer<'de>) -> Result<Box<dyn Test + Send + Sync>, erased_serde::Error>
         where Self: Sized;
+    
+    fn print_finish_message(&self, protected: bool, test_number: i32, test_name: String) {
+        if protected {
+            println!("Finished testcase {}: ********", test_number);
+        }
+        else {
+            println!("Finished testcase {}: {}", test_number, test_name);
+        }
+    }
+
+    fn get_valgrind_result(&self, is_sudo: bool, vg_filepath: String, basedir: String, vg_log_folder: String, test_number: i32, protected: bool) -> ((i32, i32), String) {
+        if cfg!(unix) && is_sudo {
+            match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &test_number)) {
+                Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
+                Err(_) => (),
+            }
+        }
+        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &test_number)).unwrap_or((-1, -1));
+        println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
+
+        if cfg!(unix) && is_sudo && protected {
+            remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &test_number)).unwrap_or(());
+        }
+        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &test_number);
+        (valgrind, vg_filepath)
+    }
+
+    fn did_pass(&self, exp_retvar: Option<i32>, retvar: Option<i32>, distance: f32, add_distance: f32, had_timeout: bool) -> bool {
+        exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == exp_retvar.unwrap()
+            && distance == 1.0 && add_distance == 1.0 && !had_timeout
+    }
+
+    fn prepare_add_diff(&self) -> Result<(bool, Option<Diff>, f32), TestingError> {
+        let add_file_missing;
+        let add_diff = match self.get_add_diff() {
+            Ok(ok) => {
+                add_file_missing = false;
+                ok
+            },
+            Err(TestingError::OutFileNotFound(_)) => {
+                add_file_missing = true;
+                None
+            },
+            Err(e) => return Err(e),
+        };
+
+        let add_distance: f32;
+        if let Some(ref diff) = add_diff {
+            match diff {
+                Diff::PlainText(_, d) => add_distance = *d,
+                Diff::Binary(_, d) => add_distance = *d,
+            }
+        }
+        else {
+            add_distance = 1.0;
+        }
+        Ok((add_file_missing, add_diff, add_distance))
+    }
 
     fn get_add_diff(&self) -> Result<Option<Diff>, TestingError> {
         let test_meta = self.get_test_meta();

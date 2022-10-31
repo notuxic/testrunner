@@ -1,5 +1,5 @@
 use std::clone::Clone;
-use std::fs::{copy, File, remove_dir_all, remove_file};
+use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::sync::Weak;
 use std::time::{Duration, Instant};
@@ -11,12 +11,11 @@ use serde_derive::{Deserialize, Serialize};
 use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
 use crate::test::diff::diff_plaintext;
-use crate::test::test::Diff;
 use crate::testresult::ordio_testresult::OrdIoTestresult;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::diff::ChangesetInline;
-use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, parse_vg_log};
+use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind};
 use super::test::{Test, TestMeta, TestcaseType, TestingError};
 
 
@@ -148,7 +147,58 @@ impl Test for OrdIoTest {
 
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
-        // calc diff
+        let (io_mismatch, io_diff, distances, len_ref_sum) = self.calculate_diff(io, timeout);
+
+        if io_mismatch {
+            return Err(TestingError::IOMismatch);
+        }
+        let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
+
+        let (add_file_missing, add_diff, add_distance) = self.prepare_add_diff()?;
+
+        let passed = self.did_pass(self.exp_retvar, retvar, distance, add_distance, had_timeout);
+
+        let input = self.io.iter().map(|e| {
+            match e {
+                InputOutput::Input(input) => input.clone(),
+                _ => "".to_owned(),
+            }
+        }).collect::<Vec<String>>().join("");
+
+        let (valgrind, vg_filepath) = self.get_valgrind_result(options.sudo.is_some(), vg_filepath, basedir, vg_log_folder, self.meta.number, self.meta.protected);
+
+        self.print_finish_message(options.protected_mode && self.meta.protected, self.meta.number, self.meta.name.to_owned());
+
+        Ok(Box::new(OrdIoTestresult {
+            io_diff,
+            diff_distance: distance,
+            add_distance: if add_diff.is_some() { Some(add_distance) } else { None },
+            add_diff,
+            add_file_missing,
+            truncated_output,
+            passed,
+            ret: retvar,
+            exp_ret: self.exp_retvar,
+            mem_leaks: valgrind.0,
+            mem_errors: valgrind.1,
+            mem_logfile: vg_filepath,
+            command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
+            input,
+            timeout: had_timeout,
+            name: self.meta.name.clone(),
+            description: self.meta.description.clone().unwrap_or("".to_owned()),
+            number: self.meta.number,
+            kind: TestcaseType::OrdIOTest,
+            protected: self.meta.protected,
+            options: self.options.clone(),
+            project_definition: self.project_definition.clone(),
+        }))
+    }
+}
+
+impl OrdIoTest {
+
+    fn calculate_diff(&self, io: Vec<InputOutput>, timeout: u64) -> (bool, Vec<IODiff>, Vec<f32>, usize) {
         let mut len_ref_sum = 0;
         let mut distances = Vec::with_capacity(io.len() / 2 + 2);
         let mut io_mismatch = false;
@@ -187,94 +237,8 @@ impl Test for OrdIoTest {
             };
             io_diff.push(diff_e);
         }
-        if io_mismatch {
-            return Err(TestingError::IOMismatch);
-        }
-        let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
-
-        let add_file_missing;
-        let add_diff = match self.get_add_diff() {
-            Ok(ok) => {
-                add_file_missing = false;
-                ok
-            },
-            Err(TestingError::OutFileNotFound(_)) => {
-                add_file_missing = true;
-                None
-            },
-            Err(e) => return Err(e),
-        };
-
-        let add_distance: f32;
-        if let Some(ref diff) = add_diff {
-            match diff {
-                Diff::PlainText(_, d) => add_distance = *d,
-                Diff::Binary(_, d) => add_distance = *d,
-            }
-        }
-        else {
-            add_distance = 1.0;
-        }
-        let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
-            && distance == 1.0 && add_distance == 1.0 && !had_timeout;
-
-        let input = self.io.iter().map(|e| {
-            match e {
-                InputOutput::Input(input) => input.clone(),
-                _ => "".to_owned(),
-            }
-        }).collect::<Vec<String>>().join("");
-
-        if cfg!(unix) && options.sudo.is_some() {
-            match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
-                Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
-                Err(_) => (),
-            }
-        }
-        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
-        println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
-
-        if cfg!(unix) && options.sudo.is_some() && self.meta.protected {
-            remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or(());
-        }
-        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number);
-
-        if options.protected_mode && self.meta.protected {
-            println!("Finished testcase {}: ********", self.meta.number);
-        }
-        else {
-            println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
-        }
-
-
-        Ok(Box::new(OrdIoTestresult {
-            io_diff,
-            diff_distance: distance,
-            add_distance: if add_diff.is_some() { Some(add_distance) } else { None },
-            add_diff,
-            add_file_missing,
-            truncated_output,
-            passed,
-            ret: retvar,
-            exp_ret: self.exp_retvar,
-            mem_leaks: valgrind.0,
-            mem_errors: valgrind.1,
-            mem_logfile: vg_filepath,
-            command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
-            input,
-            timeout: had_timeout,
-            name: self.meta.name.clone(),
-            description: self.meta.description.clone().unwrap_or("".to_owned()),
-            number: self.meta.number,
-            kind: TestcaseType::OrdIOTest,
-            protected: self.meta.protected,
-            options: self.options.clone(),
-            project_definition: self.project_definition.clone(),
-        }))
+        (io_mismatch, io_diff, distances, len_ref_sum)
     }
-}
-
-impl OrdIoTest {
 
     fn deserialize_regex<'de, D>(deserializer: D) -> Result<Regex, D::Error>
         where D: Deserializer<'de>
