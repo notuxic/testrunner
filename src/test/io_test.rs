@@ -39,7 +39,7 @@ pub struct IoTest {
     exp_string: String,
     #[serde(default)]
     argv: Vec<String>,
-    exp_retvar: Option<i32>,
+    exp_exit_code: Option<i32>,
     env_vars: Option<Vec<String>>,
 }
 
@@ -66,6 +66,8 @@ impl Test for IoTest {
     }
 
     fn run(&self) -> Result<Box<dyn Testresult + Send + Sync>, TestingError> {
+        print!(""); // make sure jobs get properly parallelized
+
         let options = self.options.upgrade().unwrap();
         let project_definition = self.project_definition.upgrade().unwrap();
 
@@ -77,7 +79,7 @@ impl Test for IoTest {
         let global_timeout = project_definition.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout);
+        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
         let had_timeout = !retvar.is_some();
         let truncated_output;
         if given_output.chars().count() > reference_output.chars().count() * 2 {
@@ -91,7 +93,7 @@ impl Test for IoTest {
         let (changeset, distance) = diff_plaintext(&reference_output, &given_output, Duration::from_secs(timeout));
         let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
-        let passed = self.did_pass(self.exp_retvar, retvar, distance, add_distance, had_timeout);
+        let passed = self.did_pass(self.exp_exit_code, retvar, distance, add_distance, had_timeout);
 
         let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?;
 
@@ -104,7 +106,7 @@ impl Test for IoTest {
             truncated_output,
             passed,
             exit_code: retvar,
-            expected_exit_code: self.exp_retvar,
+            expected_exit_code: self.exp_exit_code,
             mem_leaks,
             mem_errors,
             mem_logfile: vg_filepath,
@@ -122,38 +124,26 @@ impl Test for IoTest {
     }
 }
 
+
 impl IoTest {
-    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout : u64) -> (String, String, String, Option<i32>) {
+
+    fn run_command_with_timeout(&self, command : &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout : u64) -> Result<(String, String, String, Option<i32>), TestingError> {
         let project_definition = self.project_definition.upgrade().unwrap();
 
-        let mut input: String = String::new();
+        let input: String;
         if !self.in_file.is_empty() {
-            match read_to_string(&self.in_file) {
-                Ok(content) => {
-                    input.clone_from(&content);
-                }
-                Err(err) => {
-                    eprintln!("Cannot open stdinfile, fallback to none \n{:?}", err);
-                }
-            }
+            input = read_to_string(&self.in_file).map_err(|_| TestingError::InFileNotFound(self.in_file.clone()))?;
         }
-        else if !self.in_string.is_empty() {
-            input.clone_from(&self.in_string);
+        else {
+            input = self.in_string.clone();
         }
 
-        let mut reference_output: String = String::new();
+        let reference_output: String;
         if !self.exp_file.is_empty() {
-            match read_to_string(&self.exp_file) {
-                Ok(content) => {
-                    reference_output = content;
-                }
-                Err(err) => {
-                    eprintln!("Cannot open stdout, fallback to none \n{:?}", err);
-                }
-            }
+            reference_output = read_to_string(&self.exp_file).map_err(|_| TestingError::RefFileNotFound(self.exp_file.clone()))?;
         }
-        else if !self.exp_string.is_empty() {
-            reference_output.clone_from(&self.exp_string);
+        else {
+            reference_output = self.exp_string.clone();
         }
 
         let mut cmd = subprocess::Exec::cmd(command)
@@ -177,33 +167,12 @@ impl IoTest {
 
         match capture {
             Ok(c) => {
-                given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
-                    Some(retvar) => Some(retvar),
-                    None => {
-                        eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
-                        cmd.kill().expect("Could not kill testcase!");
-                        if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                            eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
-                        }
-                        None
-                    }
-                };
-
+                given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
                 given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
             }
 
             Err(e) => {
-                given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
-                    Some(retvar) => Some(retvar),
-                    None => {
-                        eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
-                        cmd.kill().expect("Could not kill testcase!");
-                        if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                            eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
-                        }
-                        None
-                    }
-                };
+                given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
                 given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
             }
         }
@@ -217,7 +186,21 @@ impl IoTest {
             None => None,
         };
 
-        return (input, reference_output, given_output, given_retvar);
+        return Ok((input, reference_output, given_output, given_retvar));
+    }
+}
+
+pub fn wait_on_subprocess(cmd: &mut subprocess::Popen, tc_number: i32) -> Option<subprocess::ExitStatus> {
+    match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
+        Some(retvar) => Some(retvar),
+        None => {
+            eprintln!("Testcase {} is still running, killing testcase!", tc_number);
+            cmd.kill().expect("Could not kill testcase!");
+            if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
+                eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", tc_number);
+            }
+            None
+        }
     }
 }
 

@@ -15,7 +15,7 @@ use crate::testresult::ordio_testresult::OrdIoTestresult;
 use crate::testresult::testresult::Testresult;
 use crate::testrunner::{TestrunnerError, TestrunnerOptions};
 use super::diff::ChangesetInline;
-use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind};
+use super::io_test::{prepare_cmdline, prepare_envvars, prepare_valgrind, wait_on_subprocess};
 use super::test::{Test, TestMeta, TestcaseType, TestingError};
 
 
@@ -72,7 +72,7 @@ pub struct OrdIoTest {
     io_file: String,
     #[serde(default)]
     argv: Vec<String>,
-    exp_retvar: Option<i32>,
+    exp_exit_code: Option<i32>,
     env_vars: Option<Vec<String>>,
 }
 
@@ -138,7 +138,7 @@ impl Test for OrdIoTest {
 
         let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
-        let passed = self.did_pass(self.exp_retvar, retvar, distance, add_distance, had_timeout);
+        let passed = self.did_pass(self.exp_exit_code, retvar, distance, add_distance, had_timeout);
 
         let input = self.io.iter().map(|e| {
             match e {
@@ -158,7 +158,7 @@ impl Test for OrdIoTest {
             truncated_output,
             passed,
             exit_code: retvar,
-            expected_exit_code: self.exp_retvar,
+            expected_exit_code: self.exp_exit_code,
             mem_leaks,
             mem_errors,
             mem_logfile: vg_filepath,
@@ -175,6 +175,7 @@ impl Test for OrdIoTest {
         }))
     }
 }
+
 
 impl OrdIoTest {
 
@@ -286,7 +287,7 @@ impl OrdIoTest {
         }))
     }
 
-    fn run_command_with_timeout(&self, command: &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout: u64)-> Result<(Vec<InputOutput>, Option<i32>), io::Error> {
+    fn run_command_with_timeout(&self, command: &str, args: &Vec<String>, envs: &Vec<(String, String)>, timeout: u64)-> Result<(Vec<InputOutput>, Option<i32>), TestingError> {
         let project_definition = self.project_definition.upgrade().unwrap();
 
         let timeout = Duration::from_secs(timeout);
@@ -353,17 +354,7 @@ impl OrdIoTest {
 
                         let currtime = Instant::now();
                         if currtime - starttime > timeout {
-                            let given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
-                                Some(retvar) => Some(retvar),
-                                None => {
-                                    eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
-                                    cmd.kill().expect("Could not kill testcase!");
-                                    if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                                        eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
-                                    }
-                                    None
-                                }
-                            };
+                            let given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
                             if retvar.is_none() {
                                 retvar = given_retvar;
                             }
@@ -426,34 +417,12 @@ impl OrdIoTest {
 
             match capture {
                 Ok(c) => {
-                    given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
-                        Some(retvar) => Some(retvar),
-                        None => {
-                            eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
-                            cmd.kill().expect("Could not kill testcase!");
-                            if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                                eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
-                            }
-                            None
-                        }
-                    };
-
+                    given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
                     given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
                 }
 
                 Err(e) => {
-                    given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
-                        Some(retvar) => Some(retvar),
-                        None => {
-                            eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
-                            cmd.kill().expect("Could not kill testcase!");
-                            if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                                eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
-                            }
-                            None
-                        }
-                    };
-
+                    given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
                     given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
                 }
             }
