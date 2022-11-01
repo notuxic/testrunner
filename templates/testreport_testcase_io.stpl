@@ -38,8 +38,8 @@
 				<td>
 					<%=
 						((self.diff_distance * 1000.0).floor() / 10.0).to_string()
-					%>
-				</td>%
+					%>%
+				</td>
 			</tr>
 			<% if self.add_distance.is_some() { %>
 			<tr>
