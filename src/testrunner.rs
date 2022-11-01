@@ -111,18 +111,34 @@ impl Testrunner {
                 }, |tc| tc.run())
                 .try_fold(Vec::with_capacity(self.testcases.len()), |mut acc, tc| {
                     let tc = tc?;
+
                     if tc.protected() {
                         println!("\nFinished testcase {}: ********", tc.number());
                     }
                     else {
                         println!("\nFinished testcase {}: {}", tc.number(), tc.name());
                     }
+
                     if tc.timeout() {
                         println!("  Testcase ran into a timeout! Possibly failed capturing some/all output!");
                     }
+
                     if tc.truncated_output() {
                         println!("  Truncating your output, because it's much longer than the reference output!");
                     }
+
+                    println!("  Output-Diff: {}%", (tc.diff_distance() * 1000.0).floor() / 10.0);
+                    if let Some(distance) = tc.add_diff_distance() {
+                        println!("  File-Diff: {}%", (distance * 1000.0).floor() / 10.0);
+                    }
+
+                    if tc.exit_code().unwrap_or(-99) == tc.expected_exit_code().unwrap_or(0) {
+                        println!("  Exit-Code: correct");
+                    }
+                    else {
+                        println!("  Exit-Code: incorrect");
+                    }
+
                     if self.project_definition.use_valgrind.unwrap_or(true) {
                         println!("  Memory usage errors: {}\n  Memory leaks: {}", tc.mem_errors().unwrap_or(-1), tc.mem_leaks().unwrap_or(-1));
                     }
