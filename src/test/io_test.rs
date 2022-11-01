@@ -8,7 +8,7 @@ use std::time::{Instant, Duration};
 
 use regex::Regex;
 use serde::Deserialize;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Serialize;
 use uuid::Uuid;
 
 use crate::project::binary::Binary;
@@ -106,13 +106,18 @@ impl Test for IoTest {
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
         let (changeset, distance) = diff_plaintext(&reference_output, &given_output, Duration::from_secs(timeout));
-        let (add_file_missing, add_diff, add_distance) = self.prepare_add_diff()?;
+        let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
         let passed = self.did_pass(self.exp_retvar, retvar, distance, add_distance, had_timeout);
 
-        let (valgrind, vg_filepath) = self.get_valgrind_result(options.sudo.is_some(), vg_filepath, basedir, vg_log_folder, self.meta.number, self.meta.protected);
+        let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?;
 
-        self.print_finish_message(options.protected_mode && self.meta.protected, self.meta.number, self.meta.name.to_owned());
+        if self.meta.protected {
+            println!("Finished testcase {}: ********", self.meta.number);
+        }
+        else {
+            println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
+        }
 
         Ok(Box::new(IoTestresult {
             diff: changeset,
@@ -124,8 +129,8 @@ impl Test for IoTest {
             passed,
             ret: retvar,
             exp_ret: self.exp_retvar,
-            mem_leaks: valgrind.0,
-            mem_errors: valgrind.1,
+            mem_leaks,
+            mem_errors,
             mem_logfile: vg_filepath,
             command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
             input,

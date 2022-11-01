@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use regex::Regex;
 use serde::{Deserializer, Deserialize};
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Serialize;
 
 use crate::project::binary::Binary;
 use crate::project::definition::ProjectDefinition;
@@ -25,6 +25,7 @@ pub enum InputOutput {
     Output(String),
 }
 
+#[derive(Clone, Debug)]
 pub enum IODiff {
     Input(String),
     InputUnsent(String),
@@ -147,14 +148,9 @@ impl Test for OrdIoTest {
 
         println!("Testcase took {:#?}", endtime.duration_since(starttime));
 
-        let (io_mismatch, io_diff, distances, len_ref_sum) = self.calculate_diff(io, timeout);
+        let (io_diff, distance) = self.calculate_diff(io, timeout)?;
 
-        if io_mismatch {
-            return Err(TestingError::IOMismatch);
-        }
-        let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
-
-        let (add_file_missing, add_diff, add_distance) = self.prepare_add_diff()?;
+        let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
         let passed = self.did_pass(self.exp_retvar, retvar, distance, add_distance, had_timeout);
 
@@ -165,9 +161,14 @@ impl Test for OrdIoTest {
             }
         }).collect::<Vec<String>>().join("");
 
-        let (valgrind, vg_filepath) = self.get_valgrind_result(options.sudo.is_some(), vg_filepath, basedir, vg_log_folder, self.meta.number, self.meta.protected);
+        let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?;
 
-        self.print_finish_message(options.protected_mode && self.meta.protected, self.meta.number, self.meta.name.to_owned());
+        if self.meta.protected {
+            println!("Finished testcase {}: ********", self.meta.number);
+        }
+        else {
+            println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
+        }
 
         Ok(Box::new(OrdIoTestresult {
             io_diff,
@@ -179,8 +180,8 @@ impl Test for OrdIoTest {
             passed,
             ret: retvar,
             exp_ret: self.exp_retvar,
-            mem_leaks: valgrind.0,
-            mem_errors: valgrind.1,
+            mem_leaks,
+            mem_errors,
             mem_logfile: vg_filepath,
             command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
             input,
@@ -198,7 +199,7 @@ impl Test for OrdIoTest {
 
 impl OrdIoTest {
 
-    fn calculate_diff(&self, io: Vec<InputOutput>, timeout: u64) -> (bool, Vec<IODiff>, Vec<f32>, usize) {
+    fn calculate_diff(&self, io: Vec<InputOutput>, timeout: u64) -> Result<(Vec<IODiff>, f32), TestingError> {
         let mut len_ref_sum = 0;
         let mut distances = Vec::with_capacity(io.len() / 2 + 2);
         let mut io_mismatch = false;
@@ -237,7 +238,11 @@ impl OrdIoTest {
             };
             io_diff.push(diff_e);
         }
-        (io_mismatch, io_diff, distances, len_ref_sum)
+        if io_mismatch {
+            return Err(TestingError::IOMismatch);
+        }
+        let distance = distances.iter().sum::<f32>() / len_ref_sum as f32;
+        Ok((io_diff, distance))
     }
 
     fn deserialize_regex<'de, D>(deserializer: D) -> Result<Regex, D::Error>

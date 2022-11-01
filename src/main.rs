@@ -1,6 +1,4 @@
 #[macro_use]
-extern crate horrorshow;
-#[macro_use]
 extern crate lazy_static;
 
 mod project;
@@ -25,7 +23,6 @@ fn main() {
             .long("config")
             .takes_value(true)
             .value_name("CONFIG_FILE")
-            .required_unless("TESTINPUT")
             .help("set testcase config file"))
         .arg(Arg::with_name("no-wshints")
             .short("n")
@@ -87,11 +84,10 @@ fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
     let mut runner = Testrunner::from_file(cli_args.value_of("config").unwrap(), options)?;
     runner.run_tests()?;
 
-    if let Some(html_out) = cli_args.value_of("html") {
-        if html_out != "NONE" {
-            let output = runner.generate_html_report(false)?;
-            write(html_out, output).expect("Cannot write HTML report to file!");
-        }
+    if cli_args.occurrences_of("json") > 0 {
+        let json_out = cli_args.value_of("json").unwrap();
+        let output = runner.generate_json_report()?;
+        write(json_out, output).expect("Cannot write JSON report to file!");
     }
 
     if cli_args.occurrences_of("prot-html") > 0 {
@@ -99,11 +95,9 @@ fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
         let output = runner.generate_html_report(true)?;
         write(prot_html_out, output).expect("Cannot write HTML report to file!");
     }
-
-    if cli_args.occurrences_of("json") > 0 {
-        let json_out = cli_args.value_of("json").unwrap();
-        let output = runner.generate_json_report()?;
-        write(json_out, output).expect("Cannot write JSON report to file!");
+    else if let Some(html_out) = cli_args.value_of("html") {
+        let output = runner.generate_html_report(false)?;
+        write(html_out, output).expect("Cannot write HTML report to file!");
     }
 
     Ok(())

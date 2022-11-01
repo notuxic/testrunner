@@ -64,7 +64,7 @@ impl Default for DiffKind {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum Diff {
     PlainText(Vec<ChangesetInline<String>>, f32),
     Binary(Vec<ChangesetFlat<Vec<u8>>>, f32),
@@ -97,41 +97,44 @@ pub trait Test : erased_serde::Serialize {
 
     fn deserialize_trait<'de, D: ?Sized>(deserializer: &mut dyn erased_serde::Deserializer<'de>) -> Result<Box<dyn Test + Send + Sync>, erased_serde::Error>
         where Self: Sized;
-    
-    fn print_finish_message(&self, protected: bool, test_number: i32, test_name: String) {
-        if protected {
-            println!("Finished testcase {}: ********", test_number);
-        }
-        else {
-            println!("Finished testcase {}: {}", test_number, test_name);
-        }
-    }
-
-    fn get_valgrind_result(&self, is_sudo: bool, vg_filepath: String, basedir: String, vg_log_folder: String, test_number: i32, protected: bool) -> ((i32, i32), String) {
-        if cfg!(unix) && is_sudo {
-            match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &test_number)) {
-                Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
-                Err(_) => (),
-            }
-        }
-        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &test_number)).unwrap_or((-1, -1));
-        println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
-
-        if cfg!(unix) && is_sudo && protected {
-            remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &test_number)).unwrap_or(());
-        }
-        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &test_number);
-        (valgrind, vg_filepath)
-    }
 
     fn did_pass(&self, exp_retvar: Option<i32>, retvar: Option<i32>, distance: f32, add_distance: f32, had_timeout: bool) -> bool {
         exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == exp_retvar.unwrap()
             && distance == 1.0 && add_distance == 1.0 && !had_timeout
     }
 
-    fn prepare_add_diff(&self) -> Result<(bool, Option<Diff>, f32), TestingError> {
+    fn get_valgrind_result(&self, project_definition: &ProjectDefinition, options: &TestrunnerOptions, basedir: &str, vg_log_folder: &str, vg_filepath: &str) -> Result<(Option<i32>, Option<i32>), TestingError> {
+        let meta = self.get_test_meta();
+        let mem_leaks;
+        let mem_errors;
+        if project_definition.use_valgrind.unwrap_or(true) {
+            #[allow(unused_must_use)]
+            if cfg!(unix) && options.sudo.is_some() {
+                match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &meta.number)) {
+                    Ok(_) => remove_file(&vg_filepath),
+                    Err(_) => Ok(()),
+                };
+            }
+            let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &meta.number))?;
+            println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
+
+            if cfg!(unix) && options.sudo.is_some() && meta.protected {
+                remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &meta.number)).unwrap_or(());
+            }
+
+            mem_leaks = Some(valgrind.0);
+            mem_errors = Some(valgrind.1);
+        }
+        else {
+            mem_leaks = None;
+            mem_errors = None;
+        }
+        Ok((mem_leaks, mem_errors))
+    }
+
+    fn get_add_diff(&self) -> Result<(Option<Diff>, f32, bool), TestingError> {
         let add_file_missing;
-        let add_diff = match self.get_add_diff() {
+        let add_diff = match self.calc_add_diff() {
             Ok(ok) => {
                 add_file_missing = false;
                 ok
@@ -150,21 +153,23 @@ pub trait Test : erased_serde::Serialize {
                 Diff::Binary(_, d) => add_distance = *d,
             }
         }
+        else if add_file_missing {
+            add_distance = 0.0;
+        }
         else {
             add_distance = 1.0;
         }
-        Ok((add_file_missing, add_diff, add_distance))
+        Ok((add_diff, add_distance, add_file_missing))
     }
 
-    fn get_add_diff(&self) -> Result<Option<Diff>, TestingError> {
+    fn calc_add_diff(&self) -> Result<Option<Diff>, TestingError> {
         let test_meta = self.get_test_meta();
 
         if test_meta.add_out_file.is_some() && test_meta.add_exp_file.is_some() {
             match test_meta.add_diff_mode {
                 DiffKind::PlainText => {
                     let ref_file = read_to_string(test_meta.add_exp_file.as_ref().unwrap())
-                        .unwrap();
-                        // .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
+                        .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
                     let out_file = read_to_string(test_meta.add_out_file.as_ref().unwrap())
                         .map_err(|_| TestingError::OutFileNotFound(test_meta.add_out_file.as_ref().unwrap().clone()))?;
 
@@ -173,8 +178,7 @@ pub trait Test : erased_serde::Serialize {
                 },
                 DiffKind::Binary => {
                     let mut ref_fd = File::open(test_meta.add_exp_file.as_ref().unwrap())
-                        .unwrap();
-                        // .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
+                        .map_err(|_| TestingError::RefFileNotFound(test_meta.add_exp_file.as_ref().unwrap().clone()))?;
                     let mut out_fd = File::open(test_meta.add_out_file.as_ref().unwrap())
                         .map_err(|_| TestingError::OutFileNotFound(test_meta.add_out_file.as_ref().unwrap().clone()))?;
 
