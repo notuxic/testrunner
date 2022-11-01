@@ -94,17 +94,17 @@ fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
     if cli_args.occurrences_of("json") > 0 {
         let json_out = cli_args.value_of("json").unwrap();
         let output = runner.generate_json_report()?;
-        write(json_out, output).expect("Cannot write JSON report to file!");
+        write(json_out, output)?;
     }
 
     let html_out = cli_args.value_of("html").unwrap();
     if cli_args.occurrences_of("prot-mode") > 0 {
         let output = runner.generate_html_report(true)?;
-        write(html_out, output).expect("Cannot write HTML report to file!");
+        write(html_out, output)?;
     }
     else {
         let output = runner.generate_html_report(false)?;
-        write(html_out, output).expect("Cannot write HTML report to file!");
+        write(html_out, output)?;
     }
 
     Ok(())

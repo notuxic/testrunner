@@ -23,14 +23,16 @@ pub enum TestrunnerError {
     ConfigNotFound(String),
     #[error("failed parsing config: {0}")]
     ConfigParseError(String),
+    #[error("failed writing report: {}", .0.to_string())]
+    ReportWriteError(#[from] std::io::Error),
     #[error(transparent)]
     CompileError(#[from] CompileError),
     #[error(transparent)]
     TestingError(#[from] TestingError),
     #[error("failed rendering testreport: {}", .0.to_string())]
     RenderError(#[from] RenderError),
-    #[error("error generating report: {}", .0.to_string())]
-    GenerationError(Box<dyn std::error::Error>),
+    #[error("failed generating JSON: {}", .0.to_string())]
+    JSONGenerationError(#[from] serde_json::Error),
 }
 
 #[derive(Debug)]
@@ -147,10 +149,10 @@ impl Testrunner {
         for tc in self.testresults.iter() {
             results.push(tc.get_json_entry()?);
         }
-        json.insert("testcases".to_owned(), serde_json::to_value(results).unwrap());
-        json.insert("binary".to_owned(), serde_json::to_value(&self.binary.info).unwrap());
+        json.insert("testcases".to_owned(), serde_json::to_value(results)?);
+        json.insert("binary".to_owned(), serde_json::to_value(&self.binary.info)?);
 
-        serde_json::to_string_pretty(&json).map_err(|err| TestrunnerError::GenerationError(Box::new(err)))
+        Ok(serde_json::to_string_pretty(&json)?)
     }
 }
 
