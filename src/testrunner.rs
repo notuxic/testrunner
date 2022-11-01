@@ -2,6 +2,8 @@ use std::collections::{HashMap, BTreeMap};
 use std::fs::read_to_string;
 use std::sync::Arc;
 
+use crossbeam::scope;
+use pariter::IteratorExt;
 use sailfish::{TemplateOnce, RenderError};
 use serde::{Deserializer, Deserialize};
 use serde_tagged::de::BoxFnSeed;
@@ -37,6 +39,7 @@ pub struct TestrunnerOptions {
     pub protected_mode: bool,
     pub ws_hints: bool,
     pub sudo: Option<String>,
+    pub jobs: usize,
 }
 
 impl Default for TestrunnerOptions {
@@ -46,6 +49,7 @@ impl Default for TestrunnerOptions {
             protected_mode: false,
             ws_hints: true,
             sudo: None,
+            jobs: 0,
         }
     }
 }
@@ -94,13 +98,43 @@ impl Testrunner {
             return Ok(());
         }
 
-        self.testresults = match self.testcases.iter().try_fold(Vec::with_capacity(self.testcases.len()), |mut acc, tc| {
-            acc.push(tc.run()?);
-            Ok(acc)
-        }) {
-            Ok(results) => results,
-            Err(err) => return Err(err),
-        };
+        println!("\nStarting tests ...");
+        scope(|scope| {
+            self.testresults = match self.testcases.iter()
+                .parallel_map_scoped_custom(scope, |o| {
+                    if self.options.jobs > 0 {
+                        o.threads(self.options.jobs)
+                    }
+                    else {
+                        o
+                    }
+                }, |tc| tc.run())
+                .try_fold(Vec::with_capacity(self.testcases.len()), |mut acc, tc| {
+                    let tc = tc?;
+                    if tc.protected() {
+                        println!("\nFinished testcase {}: ********", tc.number());
+                    }
+                    else {
+                        println!("\nFinished testcase {}: {}", tc.number(), tc.name());
+                    }
+                    if tc.timeout() {
+                        println!("  Testcase ran into a timeout! Possibly failed capturing some/all output!");
+                    }
+                    if tc.truncated_output() {
+                        println!("  Truncating your output, because it's much longer than the reference output!");
+                    }
+                    if self.project_definition.use_valgrind.unwrap_or(true) {
+                        println!("  Memory usage errors: {}\n  Memory leaks: {}", tc.mem_errors().unwrap_or(-1), tc.mem_leaks().unwrap_or(-1));
+                    }
+
+                    acc.push(tc);
+                    Ok(acc)
+                }) {
+                    Ok(results) => results,
+                    Err(err) => return Err::<(), TestrunnerError>(err),
+            };
+            Ok(())
+        }).unwrap()?;
         println!("\nPassed testcases: {} / {}", self.testresults.iter().filter(|test| test.passed()).count(), self.testresults.len());
         Ok(())
     }

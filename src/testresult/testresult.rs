@@ -15,6 +15,8 @@ pub trait Testresult {
 
     fn timeout(&self) -> bool;
 
+    fn truncated_output(&self) -> bool;
+
     fn mem_leaks(&self) -> Option<i32>;
 
     fn mem_errors(&self) -> Option<i32>;

@@ -1,10 +1,9 @@
 use std::fs::{create_dir_all, Permissions, read_to_string, set_permissions};
-use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Stdio};
 use std::sync::Weak;
-use std::time::{Instant, Duration};
+use std::time::Duration;
 
 use regex::Regex;
 use serde::Deserialize;
@@ -70,13 +69,6 @@ impl Test for IoTest {
         let options = self.options.upgrade().unwrap();
         let project_definition = self.project_definition.upgrade().unwrap();
 
-        if options.protected_mode && self.meta.protected {
-            println!("\nStarting testcase {}: ********", self.meta.number);
-        }
-        else {
-            println!("\nStarting testcase {}: {}", self.meta.number, self.meta.name);
-        }
-
         let basedir = project_definition.makefile_path.clone().unwrap_or(".".to_owned());
         let (vg_log_folder, vg_filepath) = prepare_valgrind(&project_definition, &options, &self.meta, &basedir);
         let (cmd_name, flags) = prepare_cmdline(&project_definition, &options, &vg_filepath)?;
@@ -85,17 +77,10 @@ impl Test for IoTest {
         let global_timeout = project_definition.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        let starttime = Instant::now();
         let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout);
-        let endtime = Instant::now();
-
-        println!("Got output from testcase {}", self.meta.number);
-
         let had_timeout = !retvar.is_some();
-
         let truncated_output;
         if given_output.chars().count() > reference_output.chars().count() * 2 {
-            println!("Truncating your output, because it's much longer than the reference output!");
             given_output.truncate(given_output.char_indices().nth(reference_output.chars().count() * 2).unwrap_or((512, ' ')).0);
             truncated_output = true;
         }
@@ -103,21 +88,12 @@ impl Test for IoTest {
             truncated_output = false;
         }
 
-        println!("Testcase took {:#?}", endtime.duration_since(starttime));
-
         let (changeset, distance) = diff_plaintext(&reference_output, &given_output, Duration::from_secs(timeout));
         let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
         let passed = self.did_pass(self.exp_retvar, retvar, distance, add_distance, had_timeout);
 
         let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?;
-
-        if self.meta.protected {
-            println!("Finished testcase {}: ********", self.meta.number);
-        }
-        else {
-            println!("Finished testcase {}: {}", self.meta.number, self.meta.name);
-        }
 
         Ok(Box::new(IoTestresult {
             diff: changeset,
@@ -204,10 +180,10 @@ impl IoTest {
                 given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
                     Some(retvar) => Some(retvar),
                     None => {
-                        println!("Testcase {} is still running, killing testcase!", self.meta.number);
+                        eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
                         cmd.kill().expect("Could not kill testcase!");
                         if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                            println!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
+                            eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
                         }
                         None
                     }
@@ -217,23 +193,17 @@ impl IoTest {
             }
 
             Err(e) => {
-                if e.kind() == io::ErrorKind::TimedOut {
-                    println!("Testcase {} ran into a timeout!", self.meta.number);
-                }
-
                 given_retvar = match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("could not wait on process!") {
                     Some(retvar) => Some(retvar),
                     None => {
-                        println!("Testcase {} is still running, killing testcase!", self.meta.number);
+                        eprintln!("Testcase {} is still running, killing testcase!", self.meta.number);
                         cmd.kill().expect("Could not kill testcase!");
                         if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                            println!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
+                            eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", self.meta.number);
                         }
                         None
                     }
                 };
-
-                println!("Possibly failed capturing some/all output!");
                 given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
             }
         }

@@ -116,7 +116,6 @@ pub trait Test : erased_serde::Serialize {
                 };
             }
             let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &meta.number))?;
-            println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
             if cfg!(unix) && options.sudo.is_some() && meta.protected {
                 remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &meta.number)).unwrap_or(());

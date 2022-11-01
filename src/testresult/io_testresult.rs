@@ -65,6 +65,10 @@ impl Testresult for IoTestresult {
         self.timeout
     }
 
+    fn truncated_output(&self) -> bool {
+        self.truncated_output
+    }
+
     fn mem_leaks(&self) -> Option<i32> {
         self.mem_leaks
     }

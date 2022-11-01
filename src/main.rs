@@ -29,6 +29,19 @@ fn main() {
             .long("no-ws-hints")
             .takes_value(false)
             .help("disable whitespace-hints in diffs of HTML report"))
+        .arg(Arg::with_name("jobs")
+            .short("J")
+            .long("jobs")
+            .takes_value(true)
+            .value_name("JOBS")
+            .default_value("0")
+            .validator(|num| {
+                match num.parse::<usize>() {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(format!("not a (positive) number: {}", num)),
+                }
+            })
+            .help("number of tests to run in parallel"))
         .arg(Arg::with_name("html")
             .short("o")
             .long("html-output")
@@ -79,6 +92,7 @@ fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
         protected_mode: cli_args.occurrences_of("prot-html") > 0,
         ws_hints: cli_args.occurrences_of("no-wshints") == 0,
         sudo: cli_args.value_of("sudo").map(|e| e.to_string()),
+        jobs: cli_args.value_of("jobs").unwrap().parse().unwrap(),
     };
 
     let mut runner = Testrunner::from_file(cli_args.value_of("config").unwrap(), options)?;
