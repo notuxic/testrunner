@@ -79,6 +79,7 @@ impl Binary {
                 }
                 else {
                     println!("Compilation successful!");
+
                     //checking for warnings...
                     let mut warns = HashMap::<String, i32>::new();
                     for cap in re_warnings.captures_iter(&errors) {

@@ -7,9 +7,10 @@ mod testresult;
 mod testrunner;
 
 use std::fs::write;
+
 use clap::{App, Arg, crate_authors, crate_description, crate_version, ArgMatches};
-use testrunner::TestrunnerError;
-use crate::testrunner::{Testrunner, TestrunnerOptions};
+
+use crate::testrunner::{Testrunner, TestrunnerOptions, TestrunnerError};
 
 
 fn main() {

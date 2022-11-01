@@ -23,7 +23,6 @@ pub struct OrdIoTestresult {
     pub add_diff: Option<Diff>,
     pub add_distance: Option<f32>,
     pub add_file_missing: bool,
-    #[serde(skip)]
     pub io_diff: Vec<IODiff>,
     pub diff_distance: f32,
     pub truncated_output: bool,
@@ -32,8 +31,8 @@ pub struct OrdIoTestresult {
     pub mem_logfile: String,
     pub command_used: String,
     pub timeout: bool,
-    pub ret: Option<i32>,
-    pub exp_ret: Option<i32>,
+    pub exit_code: Option<i32>,
+    pub expected_exit_code: Option<i32>,
     pub passed: bool,
     pub input: String,
     #[serde(skip)]
@@ -84,11 +83,11 @@ impl Testresult for OrdIoTestresult {
     }
 
     fn exit_code(&self) -> Option<i32> {
-        self.ret
+        self.exit_code
     }
 
     fn expected_exit_code(&self) -> Option<i32> {
-        self.exp_ret
+        self.expected_exit_code
     }
 
     fn diff_distance(&self) -> f32 {
@@ -101,15 +100,22 @@ impl Testresult for OrdIoTestresult {
 
     fn get_json_entry(&self) -> Result<serde_json::Value, TestrunnerError> {
         Ok(json!({
-            "name": self.name,
             "kind": format!("{}",self.kind),
+            "name": self.name,
+            "description": self.description,
             "passed": self.passed,
-            "distance": self.diff_distance,
-            "add_distance": self.add_distance.unwrap_or(-1.0),
-            "statuscode": self.ret.unwrap_or(0),
+            "diff": self.io_diff,
+            "diff_distance": self.diff_distance,
+            "add_diff": self.add_diff,
+            "add_diff_distance": self.add_distance.unwrap_or(-1.0),
+            "add_file_missing": self.add_file_missing,
+            "truncated_output": self.truncated_output,
+            "command_used": self.command_used,
+            "exit_code": self.exit_code.unwrap_or(0),
             "mem_leaks": self.mem_leaks,
             "mem_errors": self.mem_errors,
             "timeout": self.timeout,
+            "input": self.input,
             "protected" : self.protected,
         }))
     }

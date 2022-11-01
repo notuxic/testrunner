@@ -25,7 +25,7 @@ pub enum InputOutput {
     Output(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum IODiff {
     Input(String),
     InputUnsent(String),
@@ -157,8 +157,8 @@ impl Test for OrdIoTest {
             add_file_missing,
             truncated_output,
             passed,
-            ret: retvar,
-            exp_ret: self.exp_retvar,
+            exit_code: retvar,
+            expected_exit_code: self.exp_retvar,
             mem_leaks,
             mem_errors,
             mem_logfile: vg_filepath,
