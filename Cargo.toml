@@ -1,7 +1,7 @@
 [package]
 name = "testrunner"
-version = "2.0.0-alpha.9"
-authors = ["Thomas Brunner <t.brunner@student.tugraz.at>", "Florian Hager <florian.hager@student.tugraz.at>", "Mathias Kahr <m.kahr@student.tugraz.at>", "Kilian Payer <kilian.payer@student.tugraz.at>"]
+version = "2.0.0-alpha.10"
+authors = ["Thomas Brunner <t.brunner@student.tugraz.at>", "Florian Hager <florian.hager@student.tugraz.at>", "Mathias Kahr <m.kahr@student.tugraz.at>", "Kilian Payer <kilian.payer@student.tugraz.at>", "Julia Herbsthofer <julia.herbsthofer@student.tugraz.at>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
