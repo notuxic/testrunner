@@ -83,7 +83,7 @@ fn main() {
 
 fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
     let options = TestrunnerOptions {
-        protected_mode: cli_args.occurrences_of("prot-html") > 0,
+        protected_mode: cli_args.occurrences_of("prot-mode") > 0,
         ws_hints: cli_args.occurrences_of("no-wshints") == 0,
         sudo: cli_args.value_of("sudo").map(|e| e.to_string()),
         jobs: cli_args.value_of("jobs").unwrap().parse().unwrap(),
