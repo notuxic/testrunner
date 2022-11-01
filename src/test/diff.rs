@@ -7,14 +7,14 @@ use similar::{Algorithm, ChangeTag, TextDiff, capture_diff_slices_deadline, get_
 use super::ordio_test::IODiff;
 
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum ChangesetFlat<T> {
     Same(T),
     Add(T),
     Remove(T),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum ChangesetInline<T> {
     Same(Vec<ChangesetFlat<T>>),
     Add(Vec<ChangesetFlat<T>>),
@@ -119,22 +119,22 @@ pub fn textdiff_to_html(changeset: &Vec<ChangesetInline<String>>, ws_hints: bool
                 });
             },
             ChangesetInline::Remove(line) => {
-                diff_left.push_str("<span id=\"diff-add\">");
+                diff_left.push_str("<span class=\"diff-add\">");
                 line.iter().for_each(|segment| {
                     match segment {
                         ChangesetFlat::Same(text) => diff_left.push_str(&with_ws_hints(text, ws_hints)),
-                        ChangesetFlat::Remove(text) => diff_left.push_str(&format!("<span id=\"diff-add-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
+                        ChangesetFlat::Remove(text) => diff_left.push_str(&format!("<span class=\"diff-add-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
                         _ => {},
                     }
                 });
                 diff_left.push_str("</span>");
             },
             ChangesetInline::Add(line) => {
-                diff_right.push_str("<span id=\"diff-remove\">");
+                diff_right.push_str("<span class=\"diff-remove\">");
                 line.iter().for_each(|segment| {
                     match segment {
                         ChangesetFlat::Same(text) => diff_right.push_str(&with_ws_hints(text, ws_hints)),
-                        ChangesetFlat::Add(text) => diff_right.push_str(&format!("<span id=\"diff-remove-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
+                        ChangesetFlat::Add(text) => diff_right.push_str(&format!("<span class=\"diff-remove-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
                         _ => {},
                     }
                 });
@@ -202,7 +202,7 @@ pub fn binarydiff_to_html(changeset: &Vec<ChangesetFlat<Vec<u8>>>) -> (String, S
                 diff_right.push_str(&binarydata_to_hexdump(block, &mut off_left, &mut lines_left));
             },
             ChangesetFlat::Remove(block) => {
-                diff_left.push_str("<span id=\"diff-add\">");
+                diff_left.push_str("<span class=\"diff-add\">");
                 diff_left.push_str(&binarydata_to_hexdump(block, &mut off_right, &mut lines_right));
                 diff_left.push_str("</span>");
 
@@ -210,7 +210,7 @@ pub fn binarydiff_to_html(changeset: &Vec<ChangesetFlat<Vec<u8>>>) -> (String, S
                 lines_right -= lines_carry;
             },
             ChangesetFlat::Add(block) => {
-                diff_right.push_str("<span id=\"diff-remove\">");
+                diff_right.push_str("<span class=\"diff-remove\">");
                 diff_right.push_str(&binarydata_to_hexdump(block, &mut off_left, &mut lines_left));
                 diff_right.push_str("</span>");
 
@@ -245,11 +245,11 @@ pub fn iodiff_to_html(changeset: &[IODiff], ws_hints: bool) -> (String, String) 
     changeset.iter().for_each(|io_diff| {
         match io_diff {
             IODiff::Input(input) => {
-                diff_left.push_str(&format!("<span id=\"diff-input\">{}</span>", &with_ws_hints(input, ws_hints)));
-                diff_right.push_str(&format!("<span id=\"diff-input\">{}</span>", &with_ws_hints(input, ws_hints)));
+                diff_left.push_str(&format!("<span class=\"diff-input\">{}</span>", &with_ws_hints(input, ws_hints)));
+                diff_right.push_str(&format!("<span class=\"diff-input\">{}</span>", &with_ws_hints(input, ws_hints)));
             },
             IODiff::InputUnsent(input) => {
-                diff_left.push_str(&format!("<span id=\"diff-input-unsent\">{}</span>", &with_ws_hints(input, ws_hints)));
+                diff_left.push_str(&format!("<span class=\"diff-input-unsent\">{}</span>", &with_ws_hints(input, ws_hints)));
             },
             IODiff::Output(changes) => {
                 changes.iter().for_each(|change| {
@@ -266,22 +266,22 @@ pub fn iodiff_to_html(changeset: &[IODiff], ws_hints: bool) -> (String, String) 
                             });
                         },
                         ChangesetInline::Remove(line) => {
-                            diff_left.push_str("<span id=\"diff-add\">");
+                            diff_left.push_str("<span class=\"diff-add\">");
                             line.iter().for_each(|segment| {
                                 match segment {
                                     ChangesetFlat::Same(text) => diff_left.push_str(&with_ws_hints(text, ws_hints)),
-                                    ChangesetFlat::Remove(text) => diff_left.push_str(&format!("<span id=\"diff-add-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
+                                    ChangesetFlat::Remove(text) => diff_left.push_str(&format!("<span class=\"diff-add-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
                                     _ => {},
                                 }
                             });
                             diff_left.push_str("</span>");
                         },
                         ChangesetInline::Add(line) => {
-                            diff_right.push_str("<span id=\"diff-remove\">");
+                            diff_right.push_str("<span class=\"diff-remove\">");
                             line.iter().for_each(|segment| {
                                 match segment {
                                     ChangesetFlat::Same(text) => diff_right.push_str(&with_ws_hints(text, ws_hints)),
-                                    ChangesetFlat::Add(text) => diff_right.push_str(&format!("<span id=\"diff-remove-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
+                                    ChangesetFlat::Add(text) => diff_right.push_str(&format!("<span class=\"diff-remove-inline\">{}</span>", &with_ws_hints(text, ws_hints))),
                                     _ => {},
                                 }
                             });

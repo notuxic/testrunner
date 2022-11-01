@@ -1,6 +1,4 @@
 #[macro_use]
-extern crate horrorshow;
-#[macro_use]
 extern crate lazy_static;
 
 mod project;
@@ -25,7 +23,6 @@ fn main() {
             .long("config")
             .takes_value(true)
             .value_name("CONFIG_FILE")
-            .required_unless("TESTINPUT")
             .help("set testcase config file"))
         .arg(Arg::with_name("no-wshints")
             .short("n")
@@ -99,10 +96,8 @@ fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
         write(prot_html_out, output).expect("Cannot write HTML report to file!");
     }
     else if let Some(html_out) = cli_args.value_of("html") {
-        if html_out != "NONE" {
-            let output = runner.generate_html_report(false)?;
-            write(html_out, output).expect("Cannot write HTML report to file!");
-        }
+        let output = runner.generate_html_report(false)?;
+        write(html_out, output).expect("Cannot write HTML report to file!");
     }
 
     Ok(())

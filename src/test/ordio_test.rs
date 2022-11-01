@@ -26,6 +26,7 @@ pub enum InputOutput {
     Output(String),
 }
 
+#[derive(Clone, Debug)]
 pub enum IODiff {
     Input(String),
     InputUnsent(String),
@@ -211,6 +212,9 @@ impl Test for OrdIoTest {
                 Diff::PlainText(_, d) => add_distance = *d,
                 Diff::Binary(_, d) => add_distance = *d,
             }
+        }
+        else if add_file_missing {
+            add_distance = 0.0;
         }
         else {
             add_distance = 1.0;

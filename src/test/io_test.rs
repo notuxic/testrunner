@@ -129,6 +129,9 @@ impl Test for IoTest {
                 Diff::Binary(_, d) => add_distance = *d,
             }
         }
+        else if add_file_missing {
+            add_distance = 0.0;
+        }
         else {
             add_distance = 1.0;
         }

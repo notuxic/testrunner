@@ -63,7 +63,7 @@ impl Default for DiffKind {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub enum Diff {
     PlainText(Vec<ChangesetInline<String>>, f32),
     Binary(Vec<ChangesetFlat<Vec<u8>>>, f32),
