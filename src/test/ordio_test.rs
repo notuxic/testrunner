@@ -100,6 +100,8 @@ impl Test for OrdIoTest {
     }
 
     fn run(&self) -> Result<Box<dyn Testresult + Send + Sync>, TestingError> {
+        print!(""); // make sure jobs get properly parallelized
+
         let options = self.options.upgrade().unwrap();
         let project_definition = self.project_definition.upgrade().unwrap();
 
