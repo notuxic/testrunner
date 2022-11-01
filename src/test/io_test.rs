@@ -8,7 +8,7 @@ use std::time::{Instant, Duration};
 
 use regex::Regex;
 use serde::Deserialize;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Serialize;
 use uuid::Uuid;
 
 use crate::project::binary::Binary;
@@ -135,19 +135,29 @@ impl Test for IoTest {
         let passed: bool = self.exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == self.exp_retvar.unwrap()
             && distance == 1.0 && add_distance == 1.0 && !had_timeout;
 
-        if cfg!(unix) && options.sudo.is_some() {
-            match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
-                Ok(_) => remove_file(&vg_filepath).unwrap_or(()),
-                Err(_) => (),
+        let mem_leaks;
+        let mem_errors;
+        if project_definition.use_valgrind.unwrap_or(true) {
+            if cfg!(unix) && options.sudo.is_some() {
+                match copy(&vg_filepath, format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)) {
+                    Ok(_) => remove_file(&vg_filepath),
+                    Err(_) => Ok(()),
+                };
             }
-        }
-        let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or((-1, -1));
-        println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
+            let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number))?;
+            println!("Memory usage errors: {:?}\nMemory leaks: {:?}", valgrind.1, valgrind.0);
 
-        if cfg!(unix) && options.sudo.is_some() && self.meta.protected {
-            remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or(());
+            if cfg!(unix) && options.sudo.is_some() && self.meta.protected {
+                remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &self.meta.number)).unwrap_or(());
+            }
+
+            mem_leaks = Some(valgrind.0);
+            mem_errors = Some(valgrind.1);
         }
-        let vg_filepath = format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &self.meta.number);
+        else {
+            mem_leaks = None;
+            mem_errors = None;
+        }
 
         if options.protected_mode && self.meta.protected {
             println!("Finished testcase {}: ********", self.meta.number);
@@ -167,8 +177,8 @@ impl Test for IoTest {
             passed,
             ret: retvar,
             exp_ret: self.exp_retvar,
-            mem_leaks: valgrind.0,
-            mem_errors: valgrind.1,
+            mem_leaks,
+            mem_errors,
             mem_logfile: vg_filepath,
             command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
             input,

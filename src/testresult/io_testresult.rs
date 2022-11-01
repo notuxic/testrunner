@@ -25,8 +25,8 @@ pub struct IoTestresult {
     pub add_distance: Option<f32>,
     pub add_file_missing: bool,
     pub truncated_output: bool,
-    pub mem_leaks: i32,
-    pub mem_errors: i32,
+    pub mem_leaks: Option<i32>,
+    pub mem_errors: Option<i32>,
     pub mem_logfile: String,
     pub command_used: String,
     pub timeout: bool,
@@ -126,10 +126,10 @@ impl Testresult for IoTestresult {
                         tr {
                             th {:"Memory Usage-Errors / Leaks"}
                             @ if options.protected_mode && self.protected {
-                                td {:Raw(format!("{} / {}", self.mem_errors, self.mem_leaks))}
+                                td {:Raw(format!("{} / {}", self.mem_errors.unwrap_or(-1), self.mem_leaks.unwrap_or(-1)))}
                             }
                             else {
-                                td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.mem_errors, self.mem_leaks, self.mem_logfile))}
+                                td {:Raw(format!("{} / {} (<a target=\"_blank\" href=\"{}\">Open Log</a>)", self.mem_errors.unwrap_or(-1), self.mem_leaks.unwrap_or(-1), self.mem_logfile))}
                             }
                         }
                     }
@@ -218,8 +218,8 @@ impl Testresult for IoTestresult {
                 td{:format!("{}%", (distance * 1000.0).floor() / 10.0)}
                 td{:format!("{}", if self.ret.unwrap_or(-99) == self.exp_ret.unwrap_or(-1) { "correct" } else { "incorrect" })}
                 td{:format!("{}", if self.timeout { "yes" } else { "no" })}
-                td{:format!("{}", self.mem_errors)}
-                td{:format!("{}", self.mem_leaks)}
+                td{:format!("{}", self.mem_errors.unwrap_or(-1))}
+                td{:format!("{}", self.mem_leaks.unwrap_or(-1))}
                 td{@ if self.mem_logfile.is_empty() || (protected_mode && self.protected) { : ""} else { : Raw(format!("<a target=\"_blank\" href=\"{}\">Open</a>", &self.mem_logfile ))  } }
             }
         };

@@ -87,7 +87,7 @@ pub fn diff_binary(old: &[u8], new: &[u8], timeout: Duration) -> (Vec<ChangesetF
     (changeset, get_diff_ratio(&diff, old.len(), new.len()))
 }
 
-fn with_ws_hints(text: &str, ws_hints: bool) -> String {
+pub fn with_ws_hints(text: &str, ws_hints: bool) -> String {
     if ws_hints {
         let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
         re.replace_all(
