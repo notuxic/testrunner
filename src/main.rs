@@ -23,57 +23,51 @@ fn main() {
             .long("config")
             .takes_value(true)
             .value_name("CONFIG_FILE")
-            .help("set testcase config file"))
+            .default_value("test.toml")
+            .help("Sets testcase config file"))
         .arg(Arg::with_name("no-wshints")
             .short("n")
             .long("no-ws-hints")
             .takes_value(false)
-            .help("disable whitespace-hints in diffs of HTML report"))
+            .help("Disables whitespace-hints in HTML report"))
         .arg(Arg::with_name("jobs")
             .short("J")
             .long("jobs")
             .takes_value(true)
             .value_name("JOBS")
             .default_value("0")
+            .hide_default_value(true)
             .validator(|num| {
                 match num.parse::<usize>() {
                     Ok(_) => Ok(()),
                     Err(_) => Err(format!("not a (positive) number: {}", num)),
                 }
             })
-            .help("number of tests to run in parallel"))
+            .help("Sets number of tests to run in parallel"))
+        .arg(Arg::with_name("prot-mode")
+            .short("p")
+            .long("protected-mode")
+            .help("Runs in protected-mode, with details of protected testcases redacted"))
         .arg(Arg::with_name("html")
             .short("o")
             .long("html-output")
             .takes_value(true)
             .value_name("HTML_OUTPUT")
             .default_value("testreport.html")
-            .help("generate HTML report"))
-        .arg(Arg::with_name("prot-html")
-            .short("p")
-            .long("prot-html")
-            .takes_value(true)
-            .value_name("PROT_HTML_OUTPUT")
-            .default_value("testreport_protected.html")
-            .help("generate HTML report, with details of protected testcases redacted"))
+            .help("Generates HTML report"))
         .arg(Arg::with_name("json")
             .short("j")
             .long("json-output")
             .takes_value(true)
             .value_name("JSON_OUTPUT")
             .default_value("testreport.json")
-            .help("generate JSON report"))
+            .help("Generates JSON report"))
         .arg(Arg::with_name("sudo")
             .long("sudo")
             .takes_value(true)
             .value_name("USER")
             .hidden(true)
-            .help("run program through sudo as user <USER>"))
-        .arg(Arg::with_name("verbose")
-            .short("v")
-            .long("verbose")
-            .takes_value(false)
-            .help("print additional information to stdout"))
+            .help("Runs program through sudo as user <USER>"))
         .get_matches();
 
 
@@ -88,7 +82,6 @@ fn main() {
 
 fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
     let options = TestrunnerOptions {
-        verbose: cli_args.is_present("verbose"),
         protected_mode: cli_args.occurrences_of("prot-html") > 0,
         ws_hints: cli_args.occurrences_of("no-wshints") == 0,
         sudo: cli_args.value_of("sudo").map(|e| e.to_string()),
@@ -104,12 +97,12 @@ fn run(cli_args: ArgMatches) -> Result<(), TestrunnerError> {
         write(json_out, output).expect("Cannot write JSON report to file!");
     }
 
-    if cli_args.occurrences_of("prot-html") > 0 {
-        let prot_html_out = cli_args.value_of("prot-html").unwrap();
+    let html_out = cli_args.value_of("html").unwrap();
+    if cli_args.occurrences_of("prot-mode") > 0 {
         let output = runner.generate_html_report(true)?;
-        write(prot_html_out, output).expect("Cannot write HTML report to file!");
+        write(html_out, output).expect("Cannot write HTML report to file!");
     }
-    else if let Some(html_out) = cli_args.value_of("html") {
+    else {
         let output = runner.generate_html_report(false)?;
         write(html_out, output).expect("Cannot write HTML report to file!");
     }

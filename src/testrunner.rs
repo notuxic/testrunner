@@ -35,7 +35,6 @@ pub enum TestrunnerError {
 
 #[derive(Debug)]
 pub struct TestrunnerOptions {
-    pub verbose: bool,
     pub protected_mode: bool,
     pub ws_hints: bool,
     pub sudo: Option<String>,
@@ -45,7 +44,6 @@ pub struct TestrunnerOptions {
 impl Default for TestrunnerOptions {
     fn default() -> Self {
         TestrunnerOptions {
-            verbose: false,
             protected_mode: false,
             ws_hints: true,
             sudo: None,
