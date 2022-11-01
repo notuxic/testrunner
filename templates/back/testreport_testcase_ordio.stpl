@@ -1,17 +1,17 @@
 <%
-	let project_definition = self.project_definition.upgrade().unwrap();
-	let options = self.options.upgrade().unwrap();
+	let project_definition = project_definition.upgrade().unwrap();
+	let options = options.upgrade().unwrap();
 %>
 <div class="long_report">
 	<div class="title">
 		<h2>
-			<%- format!("#{:0>2}:&nbsp;<a id=\"tc-{}\"></a>{}", self.number, self.number, self.name) %>
+			<%- format!("#{:0>2}:&nbsp;<a id=\"tc-{}\"></a>{}", number, number, name) %>
 			<a class="link-summary" href="#summary">(back to summary)</a>
 		</h2>
 	</div>
 	<div class="description">
 		<p>
-			<%= self.description %>
+			<%= description %>
 		</p>
 	</div>
 	<div class="shortinfo">
@@ -24,7 +24,7 @@
 				<th>Passed</th>
 				<td>
 					<%-
-						if self.passed {
+						if *passed {
 							"<span class=\"success\">&#x2714;</span>"
 						}
 						else {
@@ -37,16 +37,16 @@
 				<th>Output-Diff</th>
 				<td>
 					<%=
-						((self.diff_distance * 1000.0).floor() / 10.0).to_string()
+						((diff_distance * 1000.0).floor() / 10.0).to_string()
 					%>%
 				</td>
 			</tr>
-			<% if self.add_distance.is_some() { %>
+			<% if add_distance.is_some() { %>
 			<tr>
 				<th>File-Diff</th>
 				<td>
 					<%=
-						((self.add_distance.unwrap_or(0.0) * 1000.0).floor() / 10.0).to_string()
+						((add_distance.unwrap_or(0.0) * 1000.0).floor() / 10.0).to_string()
 					%>%
 				</td>
 			</tr>
@@ -54,28 +54,28 @@
 			<tr>
 				<th>Timeout</th>
 				<td>
-					<%= if self.timeout { "yes" } else { "no" } %>
+					<%= if *timeout { "yes" } else { "no" } %>
 				</td>
 			</tr>
 			<tr>
 				<th>Commandline</th>
 				<td>
-					<span class="inline-code"><%= self.command_used %></span>
+					<span class="inline-code"><%= command_used %></span>
 				</td>
 			</tr>
 			<tr>
 				<th>Exit Code</th>
 				<td>
-					expected: <span class="inline-code"><%= self.expected_exit_code.unwrap_or(-99) %></span>, got <span class="inline-code"><%= self.exit_code.unwrap_or(-99) %></span>
+					expected: <span class="inline-code"><%= exp_ret.unwrap_or(-99) %></span>, got <span class="inline-code"><%= ret.unwrap_or(-99) %></span>
 				</td>
 			</tr>
 			<% if project_definition.use_valgrind.unwrap_or(true) { %>
 			<tr>
 				<th>Memory Usage-Errors / Leaks</th>
 				<td>
-					<%= self.mem_errors.unwrap_or(-1) %> / <%= self.mem_leaks.unwrap_or(-1) %>
-					<% if !(options.protected_mode && self.protected) { %>
-					(<a target="_blank" href="<%= self.mem_logfile %>">Open Log</a>)
+					<%= mem_errors.unwrap_or(-1) %> / <%= mem_leaks.unwrap_or(-1) %>
+					<% if !(options.protected_mode && *protected) { %>
+					(<a target="_blank" href="<%= mem_logfile %>">Open Log</a>)
 					<% } %>
 				</td>
 			</tr>
@@ -83,7 +83,7 @@
 		</table>
 	</div>
 
-	<% if self.truncated_output { %>
+	<% if *truncated_output { %>
 	<div class="failed">
 		<span class="warning">Your output has been truncated, as it is a lot longer than the reference output!</span>
 	</div>
@@ -96,15 +96,15 @@
 				<th>Your Output</th>
 			</tr>
 			<tr>
-				<% let (diff_left, diff_right) = iodiff_to_html(&self.io_diff, options.ws_hints); %>
+				<% let (diff_left, diff_right) = iodiff_to_html(&io_diff, options.ws_hints); %>
 				<td class="orig"><%- diff_left %></td>
 				<td class="edit"><%- diff_right %></td>
 			</tr>
 		</table>
 	</div>
 
-	<% if self.add_diff.is_some() { %>
-	<% if self.add_file_missing { %>
+	<% if add_diff.is_some() { %>
+	<% if *add_file_missing { %>
 	<div class="failed">
 		<span class="warning">Your file could not be found!</span>
 	</div>
@@ -117,7 +117,7 @@
 			</tr>
 			<tr>
 				<%
-					match self.add_diff.as_ref().unwrap() {
+					match add_diff.as_ref().unwrap() {
 						Diff::PlainText(ref diff, _) => {
 							let (diff_left, diff_right) = textdiff_to_html(&diff, options.ws_hints);
 				%>
