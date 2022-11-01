@@ -79,8 +79,8 @@ impl Test for IoTest {
         let global_timeout = project_definition.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        let (input, reference_output, mut given_output, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
-        let had_timeout = !retvar.is_some();
+        let (input, reference_output, mut given_output, exit_code) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
+        let had_timeout = !exit_code.is_some();
         let truncated_output;
         if given_output.chars().count() > reference_output.chars().count() * 2 {
             given_output.truncate(given_output.char_indices().nth(reference_output.chars().count() * 2).unwrap_or((512, ' ')).0);
@@ -93,7 +93,7 @@ impl Test for IoTest {
         let (changeset, distance) = diff_plaintext(&reference_output, &given_output, Duration::from_secs(timeout));
         let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
-        let passed = self.did_pass(self.exp_exit_code, retvar, distance, add_distance, had_timeout);
+        let passed = self.did_pass(self.exp_exit_code, exit_code, distance, add_distance, had_timeout);
 
         let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?;
 
@@ -105,7 +105,7 @@ impl Test for IoTest {
             add_file_missing,
             truncated_output,
             passed,
-            exit_code: retvar,
+            exit_code,
             expected_exit_code: self.exp_exit_code,
             mem_leaks,
             mem_errors,
@@ -158,7 +158,7 @@ impl IoTest {
             .expect("Could not spawn process!");
 
 
-        let given_retvar;
+        let given_exit_code;
         let given_output;
 
         let capture = cmd.communicate_start(Some(input.as_bytes().iter().cloned().collect()))
@@ -167,32 +167,32 @@ impl IoTest {
 
         match capture {
             Ok(c) => {
-                given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
+                given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
                 given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
             }
 
             Err(e) => {
-                given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
+                given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
                 given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
             }
         }
 
-        let given_retvar = match given_retvar {
+        let given_exit_code = match given_exit_code {
             Some(v) => match v {
-                subprocess::ExitStatus::Exited(retvar) => Some(retvar as i32),
-                subprocess::ExitStatus::Other(retvar) => Some(retvar),
+                subprocess::ExitStatus::Exited(exit_code) => Some(exit_code as i32),
+                subprocess::ExitStatus::Other(exit_code) => Some(exit_code),
                 _ => None,
             }
             None => None,
         };
 
-        return Ok((input, reference_output, given_output, given_retvar));
+        return Ok((input, reference_output, given_output, given_exit_code));
     }
 }
 
 pub fn wait_on_subprocess(cmd: &mut subprocess::Popen, tc_number: i32) -> Option<subprocess::ExitStatus> {
     match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
-        Some(retvar) => Some(retvar),
+        Some(exit_code) => Some(exit_code),
         None => {
             eprintln!("Testcase {} is still running, killing testcase!", tc_number);
             cmd.kill().expect("Could not kill testcase!");

@@ -98,8 +98,8 @@ pub trait Test : erased_serde::Serialize {
     fn deserialize_trait<'de, D: ?Sized>(deserializer: &mut dyn erased_serde::Deserializer<'de>) -> Result<Box<dyn Test + Send + Sync>, erased_serde::Error>
         where Self: Sized;
 
-    fn did_pass(&self, exp_retvar: Option<i32>, retvar: Option<i32>, distance: f32, add_distance: f32, had_timeout: bool) -> bool {
-        exp_retvar.is_some() && retvar.is_some() && retvar.unwrap() == exp_retvar.unwrap()
+    fn did_pass(&self, exp_exit_code: Option<i32>, exit_code: Option<i32>, distance: f32, add_distance: f32, had_timeout: bool) -> bool {
+        exit_code.is_some() && exit_code.unwrap() == exp_exit_code.unwrap_or(0)
             && distance == 1.0 && add_distance == 1.0 && !had_timeout
     }
 

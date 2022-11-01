@@ -113,8 +113,8 @@ impl Test for OrdIoTest {
         let global_timeout = project_definition.global_timeout.unwrap_or(5);
         let timeout = self.meta.timeout.unwrap_or(global_timeout);
 
-        let (mut io, retvar) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
-        let had_timeout = !retvar.is_some();
+        let (mut io, exit_code) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
+        let had_timeout = !exit_code.is_some();
         let mut truncated_output = false;
         let ref_output_len = match self.io.iter().rev().rfind(|io_e| io_e.is_output()) {
             Some(io_e) => {
@@ -138,7 +138,7 @@ impl Test for OrdIoTest {
 
         let (add_diff, add_distance, add_file_missing) = self.get_add_diff()?;
 
-        let passed = self.did_pass(self.exp_exit_code, retvar, distance, add_distance, had_timeout);
+        let passed = self.did_pass(self.exp_exit_code, exit_code, distance, add_distance, had_timeout);
 
         let input = self.io.iter().map(|e| {
             match e {
@@ -157,7 +157,7 @@ impl Test for OrdIoTest {
             add_file_missing,
             truncated_output,
             passed,
-            exit_code: retvar,
+            exit_code,
             expected_exit_code: self.exp_exit_code,
             mem_leaks,
             mem_errors,
@@ -329,7 +329,7 @@ impl OrdIoTest {
         let starttime = Instant::now();
 
         // continiously write input and read output
-        let mut retvar = None;
+        let mut exit_code = None;
         'io_loop: loop {
             match &curr_io {
                 InputOutput::Input(input) => {
@@ -354,9 +354,9 @@ impl OrdIoTest {
 
                         let currtime = Instant::now();
                         if currtime - starttime > timeout {
-                            let given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
-                            if retvar.is_none() {
-                                retvar = given_retvar;
+                            let given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
+                            if exit_code.is_none() {
+                                exit_code = given_exit_code;
                             }
 
                             io.push(InputOutput::Output(output));
@@ -364,8 +364,8 @@ impl OrdIoTest {
                             break 'io_loop;
                         }
 
-                        retvar = cmd.poll();
-                        if retvar.is_some() {
+                        exit_code = cmd.poll();
+                        if exit_code.is_some() {
                             // check for some final output
                             let result = communicator.read();
                             match result {
@@ -404,12 +404,12 @@ impl OrdIoTest {
 
         let currtime = Instant::now();
         if currtime - starttime > timeout {
-            retvar = None;
+            exit_code = None;
         }
 
         // check for some final output
         if !has_finished {
-            let given_retvar;
+            let given_exit_code;
             let given_output;
 
             drop(stdin);
@@ -417,18 +417,18 @@ impl OrdIoTest {
 
             match capture {
                 Ok(c) => {
-                    given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
+                    given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
                     given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
                 }
 
                 Err(e) => {
-                    given_retvar = wait_on_subprocess(&mut cmd, self.meta.number);
+                    given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
                     given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
                 }
             }
 
-            if retvar.is_none() {
-                retvar = given_retvar;
+            if exit_code.is_none() {
+                exit_code = given_exit_code;
             }
 
             if let Some(prev_io) = io.last_mut() {
@@ -443,16 +443,16 @@ impl OrdIoTest {
             }
         }
 
-        let retvar = match retvar {
+        let exit_code = match exit_code {
             Some(v) => match v {
-                subprocess::ExitStatus::Exited(retvar) => Some(retvar as i32),
-                subprocess::ExitStatus::Other(retvar) => Some(retvar),
+                subprocess::ExitStatus::Exited(exit_code) => Some(exit_code as i32),
+                subprocess::ExitStatus::Other(exit_code) => Some(exit_code),
                 _ => None,
             },
             None => None,
         };
 
-        Ok((io, retvar))
+        Ok((io, exit_code))
     }
 }
 
