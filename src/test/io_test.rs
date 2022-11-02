@@ -194,10 +194,10 @@ pub fn wait_on_subprocess(cmd: &mut subprocess::Popen, tc_number: i32) -> Option
     match cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!") {
         Some(exit_code) => Some(exit_code),
         None => {
-            eprintln!("Testcase {} is still running, killing testcase!", tc_number);
+            eprintln!("Warning: testcase {} is still running, killing testcase!", tc_number);
             cmd.kill().expect("Could not kill testcase!");
             if cmd.wait_timeout(std::time::Duration::new(2, 0)).expect("Could not wait on process!").is_none() {
-                eprintln!("Testcase {} is still running, failed to kill testcase! Moving on regardless...", tc_number);
+                eprintln!("Warning: testcase {} is still running, failed to kill testcase! Moving on regardless...", tc_number);
             }
             None
         }

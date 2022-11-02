@@ -252,7 +252,7 @@ impl OrdIoTest {
                     return acc;
                 }
                 else {
-                    eprintln!("Ignoring line with invalid prefix in file: {}", &path);
+                    eprintln!("Warning: ignoring line with invalid prefix in file: {}", &path);
                     return acc;
                 }
 
