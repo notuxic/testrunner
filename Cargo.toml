@@ -1,6 +1,6 @@
 [package]
 name = "testrunner"
-version = "2.0.0-rc.1"
+version = "2.0.0-rc.2"
 authors = ["Thomas Brunner <t.brunner@student.tugraz.at>", "Florian Hager <florian.hager@student.tugraz.at>", "Mathias Kahr <m.kahr@student.tugraz.at>", "Kilian Payer <kilian.payer@student.tugraz.at>", "Julia Herbsthofer <julia.herbsthofer@student.tugraz.at>"]
 edition = "2018"
 

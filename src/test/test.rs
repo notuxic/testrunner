@@ -103,7 +103,13 @@ pub trait Test : erased_serde::Serialize {
             && distance == 1.0 && add_distance == 1.0 && !had_timeout
     }
 
-    fn get_valgrind_result(&self, project_definition: &ProjectDefinition, options: &TestrunnerOptions, basedir: &str, vg_log_folder: &str, vg_filepath: &str) -> Result<(Option<i32>, Option<i32>), TestingError> {
+    fn get_valgrind_result(&self, project_definition: &ProjectDefinition, options: &TestrunnerOptions, basedir: &str, vg_log_folder: &str, vg_filepath: &str, timeout: bool) -> Result<(Option<i32>, Option<i32>), TestingError> {
+        if timeout {
+            // if the process gets killed on timeout, then we might not have a complete
+            // valgrind log we can parse
+            return Ok((Some(-1), Some(-1)));
+        }
+
         let meta = self.get_test_meta();
         let mem_leaks;
         let mem_errors;

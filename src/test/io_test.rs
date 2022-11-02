@@ -95,7 +95,7 @@ impl Test for IoTest {
 
         let passed = self.did_pass(self.exp_exit_code, exit_code, distance, add_distance, had_timeout);
 
-        let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?;
+        let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath, had_timeout)?;
 
         Ok(Box::new(IoTestresult {
             diff: changeset,
