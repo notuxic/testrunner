@@ -247,6 +247,9 @@ pub fn prepare_cmdline(project_definition: &ProjectDefinition, options: &Testrun
             args.push("--show-leak-kinds=all".to_owned());
             args.push("--track-origins=yes".to_owned());
         }
+        if let Some(suppressions) = &project_definition.valgrind_suppressions {
+            args.push(format!("--suppressions={}", suppressions));
+        }
         args.push(format!("--log-file={}", &vg_filepath ));
     }
     args.push(format!("{}", &project_definition.binary_path));
@@ -273,13 +276,16 @@ pub fn prepare_envvars(env_vars: Option<&Vec<String>>) -> Vec<(String, String)> 
 }
 
 pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), TestingError> {
-    let re = Regex::new(r"(?s)in use at exit: [0-9,]+ bytes? in (?P<leaks>[0-9,]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9,]+) errors? from [0-9,]+ contexts?")
+    let re = Regex::new(r"(?s)definitely lost: [0-9,]+ bytes? in (?P<lostd>[0-9,]+) blocks?.*indirectly lost: [0-9,]+ bytes? in (?P<losti>[0-9,]+) blocks?.*possibly lost: [0-9,]+ bytes? in (?P<lostp>[0-9,]+) blocks?.*still reachable: [0-9,]+ bytes? in (?P<lostr>[0-9,]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9,]+) errors? from [0-9,]+ contexts?")
         .unwrap();
-    let mut retvar = (-1, 1);
+    let mut retvar = (-1, -1);
     match read_to_string(filepath) {
         Ok(content) => match re.captures_iter(&content).last() {
             Some(cap) => {
-                retvar.0 = cap["leaks"].replace(",", "").parse().unwrap_or(-1);
+                retvar.0 = cap["lostd"].replace(",", "").parse().unwrap_or(-1)
+                    + cap["losti"].replace(",", "").parse().unwrap_or(-1)
+                    + cap["lostp"].replace(",", "").parse().unwrap_or(-1)
+                    + cap["lostr"].replace(",", "").parse().unwrap_or(-1);
                 retvar.1 = cap["errors"].replace(",", "").parse().unwrap_or(-1);
                 return Ok(retvar);
             }
