@@ -73,7 +73,7 @@ impl Test for IoTest {
 
         let basedir = project_definition.makefile_path.clone().unwrap_or(".".to_owned());
         let (vg_log_folder, vg_filepath) = prepare_valgrind(&project_definition, &options, &self.meta, &basedir);
-        let (cmd_name, flags) = prepare_cmdline(&project_definition, &options, &vg_filepath)?;
+        let (cmd_name, flags) = prepare_cmdline(&project_definition, &options, &vg_filepath, false)?;
         let env_vars = prepare_envvars(self.env_vars.as_ref());
 
         let global_timeout = project_definition.global_timeout.unwrap_or(5);
@@ -223,38 +223,36 @@ pub fn prepare_valgrind(project_definition: &ProjectDefinition, options: &Testru
     (vg_log_folder, vg_filepath)
 }
 
-pub fn prepare_cmdline(project_definition: &ProjectDefinition, options: &TestrunnerOptions, vg_filepath: &str) -> Result<(String, Vec<String>), TestingError> {
-    let cmd_name = if options.sudo.is_some() && cfg!(unix) {
-        "sudo".to_owned()
-    } else if project_definition.use_valgrind.unwrap_or(true) {
-        "valgrind".to_owned()
-    } else {
-        format!("./{}", &project_definition.binary_path)
-    };
-
-    let mut flags = Vec::<String>::new();
+pub fn prepare_cmdline(project_definition: &ProjectDefinition, options: &TestrunnerOptions, vg_filepath: &str, unbuffer: bool) -> Result<(String, Vec<String>), TestingError> {
+    let mut args = Vec::<String>::new();
     if options.sudo.is_some() {
         check_program_availability("sudo")?;
-        flags.push("--preserve-env".to_owned());
-        flags.push(format!("--user={}", &options.sudo.as_ref().unwrap()));
-        if project_definition.use_valgrind.unwrap_or(true) {
-            flags.push("valgrind".to_owned());
-        }
+        args.push("sudo".to_owned());
+        args.push("--preserve-env".to_owned());
+        args.push(format!("--user={}", &options.sudo.as_ref().unwrap()));
+    }
+    if unbuffer {
+        check_program_availability("stdbuf")?;
+        args.push("stdbuf".to_owned());
+        args.push("-o0".to_owned());
     }
     if project_definition.use_valgrind.unwrap_or(true) {
         check_program_availability("valgrind")?;
+        args.push("valgrind".to_owned());
         if let Some(v) = &project_definition.valgrind_flags {
-            flags.append(&mut v.clone());
+            args.append(&mut v.clone());
         }
         else {
-            flags.push("--leak-check=full".to_owned());
-            flags.push("--show-leak-kinds=all".to_owned());
-            flags.push("--track-origins=yes".to_owned());
+            args.push("--leak-check=full".to_owned());
+            args.push("--show-leak-kinds=all".to_owned());
+            args.push("--track-origins=yes".to_owned());
         }
-        flags.push(format!("--log-file={}", &vg_filepath ));
-        flags.push(format!("./{}", &project_definition.binary_path));
+        args.push(format!("--log-file={}", &vg_filepath ));
     }
+    args.push(format!("{}", &project_definition.binary_path));
 
+    let flags = args.split_off(1);
+    let cmd_name = args.pop().unwrap();
     Ok((cmd_name, flags))
 }
 

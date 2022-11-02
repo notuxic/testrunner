@@ -107,7 +107,7 @@ impl Test for OrdIoTest {
 
         let basedir = project_definition.makefile_path.clone().unwrap_or(".".to_owned());
         let (vg_log_folder, vg_filepath) = prepare_valgrind(&project_definition, &options, &self.meta, &basedir);
-        let (cmd_name, flags) = prepare_cmdline(&project_definition, &options, &vg_filepath)?;
+        let (cmd_name, flags) = prepare_cmdline(&project_definition, &options, &vg_filepath, true)?;
         let env_vars = prepare_envvars(self.env_vars.as_ref());
 
         let global_timeout = project_definition.global_timeout.unwrap_or(5);
