@@ -116,13 +116,13 @@ impl Test for OrdIoTest {
         let (mut io, exit_code) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
         let had_timeout = !exit_code.is_some();
         let mut truncated_output = false;
-        let ref_output_len = match self.io.iter().rev().rfind(|io_e| io_e.is_output()) {
+        let ref_output_len = match self.io.iter().rfind(|io_e| io_e.is_output()) {
             Some(io_e) => {
                 io_e.get_ref().chars().count()
             },
             None => { 256 },
         };
-        if let Some(io_e) = io.iter_mut().rev().rfind(|io_e| io_e.is_output()) {
+        if let Some(io_e) = io.iter_mut().rfind(|io_e| io_e.is_output()) {
             match io_e {
                 InputOutput::Output(ref mut out) => {
                     if out.chars().count() > ref_output_len * 2 {
