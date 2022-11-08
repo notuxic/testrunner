@@ -168,12 +168,12 @@ impl IoTest {
         match capture {
             Ok(c) => {
                 given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
-                given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
+                given_output = String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())).into_owned();
             }
 
             Err(e) => {
                 given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
-                given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
+                given_output = String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())).into_owned();
             }
         }
 
@@ -249,7 +249,7 @@ pub fn prepare_cmdline(project_definition: &ProjectDefinition, options: &Testrun
         }
         args.push(format!("--log-file={}", &vg_filepath ));
     }
-    args.push(format!("{}", &project_definition.binary_path));
+    args.push(project_definition.binary_path.clone());
 
     let flags = args.split_off(1);
     let cmd_name = args.pop().unwrap();

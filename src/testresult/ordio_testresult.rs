@@ -100,7 +100,7 @@ impl Testresult for OrdIoTestresult {
 
     fn get_json_entry(&self) -> Result<serde_json::Value, TestrunnerError> {
         Ok(json!({
-            "kind": format!("{}",self.kind),
+            "kind": self.kind.to_string(),
             "name": self.name,
             "description": self.description,
             "passed": self.passed,

@@ -317,10 +317,10 @@ impl OrdIoTest {
             let result = communicator.read();
             match result {
                 Ok(comm) => {
-                    io.push(InputOutput::Output(String::from_utf8_lossy(&comm.0.unwrap_or(vec![])).to_string()));
+                    io.push(InputOutput::Output(String::from_utf8_lossy(&comm.0.unwrap_or(vec![])).into_owned()));
                 },
                 Err(err) => {
-                    io.push(InputOutput::Output(String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])).to_string()));
+                    io.push(InputOutput::Output(String::from_utf8_lossy(&err.capture.0.unwrap_or(vec![])).into_owned()));
                 }
             }
             curr_io = ref_io.next().unwrap().clone();
@@ -418,12 +418,12 @@ impl OrdIoTest {
             match capture {
                 Ok(c) => {
                     given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
-                    given_output = format!("{}", String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())));
+                    given_output = String::from_utf8_lossy(&c.0.unwrap_or(Vec::new())).into_owned();
                 }
 
                 Err(e) => {
                     given_exit_code = wait_on_subprocess(&mut cmd, self.meta.number);
-                    given_output = format!("{}", String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())));
+                    given_output = String::from_utf8_lossy(&e.capture.0.unwrap_or(Vec::new())).into_owned();
                 }
             }
 
