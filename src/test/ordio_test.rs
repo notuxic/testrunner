@@ -228,7 +228,7 @@ impl OrdIoTest {
     fn deserialize_regex<'de, D>(deserializer: D) -> Result<Regex, D::Error>
         where D: Deserializer<'de>
     {
-        return Ok(Regex::new(&format!("(?m){}", &String::deserialize(deserializer)?)).unwrap());
+        return Ok(Regex::new(&format!("(?mi){}", &String::deserialize(deserializer)?)).unwrap());
     }
 
     fn parse_io_file(path: &str) -> Result<Vec<InputOutput>, TestingError> {
