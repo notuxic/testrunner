@@ -110,7 +110,7 @@ impl Test for IoTest {
             mem_leaks,
             mem_errors,
             mem_logfile: format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, self.meta.number),
-            command_used: format!("./{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
+            command_used: format!("{} {}", &project_definition.binary_path, &self.argv.clone().join(" ")),
             input,
             timeout: had_timeout,
             name: self.meta.name.clone(),
