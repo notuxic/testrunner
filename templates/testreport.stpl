@@ -206,7 +206,15 @@
 				</tr>
 				<tr>
 					<td id="compiler">
-						<%= self.binary.info.errors.clone().unwrap().replace("\n", "<br />").replace(" ", "&nbsp;") %>
+						<%-
+							self.binary.info.errors.clone().unwrap()
+								.replace("&", "&amp;")
+								.replace("<", "&lt;")
+								.replace(">", "&gt;")
+								.replace(" ", "&nbsp;")
+								.replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")
+								.replace("\n", "<br />")
+						%>
 					</td>
 				</tr>
 			</table>

@@ -91,13 +91,13 @@ pub fn with_ws_hints(text: &str, ws_hints: bool) -> String {
     if ws_hints {
         let re = Regex::new(r"(?P<m>(?:&middot;|\t|\n|\x00)+)").unwrap();
         re.replace_all(
-            &text.replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"),
+            &text.replace("&", "&amp;").replace(" ", "&middot;").replace("<", "&lt;").replace(">", "&gt;"),
             "<span class=\"whitespace-hint\">${m}</span>"
             ).replace("\t", "&#x21a6;&nbsp;&nbsp;&nbsp;")
     }
     else {
-        text.replace(" ", "&nbsp;")
-            .replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace(" ", "&nbsp;").replace("\t", "&nbsp;&nbsp;&nbsp;&nbsp;")
     }
 }
 
