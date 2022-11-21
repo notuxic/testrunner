@@ -82,7 +82,7 @@ impl Test for IoTest {
         let (input, reference_output, mut given_output, exit_code) = self.run_command_with_timeout(&cmd_name, &flags, &env_vars, timeout)?;
         let had_timeout = !exit_code.is_some();
         let truncated_output;
-        if given_output.chars().count() > reference_output.chars().count() * 2 {
+        if had_timeout && given_output.chars().count() > reference_output.chars().count() * 2 {
             given_output.truncate(given_output.char_indices().nth(reference_output.chars().count() * 2).unwrap_or((512, ' ')).0);
             truncated_output = true;
         }
