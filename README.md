@@ -79,12 +79,12 @@ This tool is developed for, and by the team of, the first-year university course
 *Objektorientierte Programmierung 1* (*Object-oriented Programming 1*) at *Graz University of Technology*.
 
 Early on, the project got moved into a mono-repository; some time later, it got moved out into
-its own dedicated repository again. Because of this, much of the early development history
+its own dedicated repository again. For this reason, much of the early development history
 is not available in git anymore.
 
 
 License
 -------
 
-[Apache-2.0](./LICENSE)
+[TODO](./LICENSE)
 
