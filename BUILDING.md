@@ -35,10 +35,10 @@ Building for size
 If the copies distributed to your users are hosted at the same location, such
 as a central git server where every user has its own repository, then you may want
 to build for a reduced binary size.
-This can be archieved by also building the standard-library, instead of using a
+This can be achieved by also building the standard-library, instead of using a
 prebuilt one.
 
-First, install a rust-nightly toolchain and the neccessary component(s):
+First, install a rust-nightly toolchain and the necessary component(s):
 
 ```
 rustup toolchain install nightly
@@ -57,7 +57,7 @@ Building for portability and size (Linux)
 
 The above commands can be combined to build for both portability and size.
 
-First, install the neccessary targets and component(s), if not installed:
+First, install the necessary targets and component(s), if not installed:
 
 ```
 rustup toolchain install nightly
