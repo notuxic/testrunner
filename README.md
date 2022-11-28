@@ -86,5 +86,5 @@ is not available in git anymore.
 License
 -------
 
-[Apache2.0](./LICENSE)
+[Apache-2.0](./LICENSE)
 
