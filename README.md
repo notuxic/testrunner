@@ -4,7 +4,7 @@ Testrunner
 *Testrunner* is a input/output -based testing tool, written for courses teaching *C* and *C++*.
 
 It aims to provide a comprehensive tool for checking programs for correctness in the context of
-teaching *C* and *C++* (correct program behaviour using I/O, compiler warnings, memory leaks, ...),
+teaching *C* and *C++* (correct program behaviour on *I/O*, compiler warnings, memory leaks, ...),
 while also generating a report that can be understood by less experienced users.
 
 
@@ -12,7 +12,7 @@ Features
 --------
 
 The *testrunner* is designed to be both, distributed along with public testcases to users for local testing, as well
-as used for testing on a central testsystem with public **and** secret/private testcases.
+as used for testing on a central testsystem with public _and_ secret/private testcases.
 
 It is configured using a *TOML* configuration file, along with additional files containing the input
 and reference output for the various testcases.
@@ -78,10 +78,7 @@ This tool is developed for, and by the team of, the first-year university course
 *Einführung in die strukturierte Programmierung* (*Introduction to Structured Programming*) and
 *Objektorientierte Programmierung 1* (*Object-oriented Programming 1*) at *Graz University of Technology*.
 
-It was originally developed as a proof-of-concept by Thomas Brunner, with the goal of
-creating a more user-friendly testing tool compared to the one used previously.
-
-Early on, the project got moved into a mono-repository. Some time later, it got moved out into
+Early on, the project got moved into a mono-repository; some time later, it got moved out into
 its own dedicated repository again. Because of this, much of the early development history
 is not available in git anymore.
 
