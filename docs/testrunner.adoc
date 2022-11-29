@@ -1,0 +1,52 @@
+= testrunner(1)
+:doctype: manpage
+:mantitle: TESTRUNNER
+:manversion: 2.0.0
+
+
+== NAME
+
+testrunner - a I/O-based testing tool for C and C++ programs
+
+
+== SYNOPSIS
+
+*testrunner* [_OPTIONS_]
+
+
+== OPTIONS
+
+*-n, --no-ws-hints*::
+  Disables whitespace-hints in HTML report
+
+*-p, --protected-mode*::
+  Runs in protected-mode, with details of protected testcases redacted
+
+*-h, --help*::
+  Prints help information
+
+*-V, --version*::
+  Prints version information
+
+*-c, --config* _<CONFIG_FILE>_::
+  Sets testcase config file [default: test.toml]
+
+*-J, --jobs* _<JOBS>_::
+  Sets number of tests to run in parallel
+
+*-o, --html-output* _<HTML_OUTPUT>_::
+  Generates HTML report [default: testreport.html]
+
+*-j, --json-output* _<JSON_OUTPUT>_::
+  Generates JSON report [default: testreport.json]
+
+
+== OVERVIEW
+
+TODO
+
+
+== SEE ALSO
+
+**testrunner-config**(5)
+

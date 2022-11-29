@@ -1,0 +1,24 @@
+= testrunner-config(5)
+:doctype: manpage
+:mantitle: TESTRUNNER-CONFIG
+:manversion: 2.0.0
+
+== NAME
+
+testrunner-config - configuring testcases for **testrunner**(1)
+
+
+== SYNOPSIS
+
+TODO
+
+
+== DESCRIPTION
+
+TODO
+
+
+== SEE ALSO
+
+**testrunner**(1)
+

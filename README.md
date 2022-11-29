@@ -80,7 +80,7 @@ This tool is developed for, and by the team of, the first-year university course
 
 Early on, the project got moved into a mono-repository; some time later, it got moved out into
 its own dedicated repository again. For this reason, much of the early development history
-is not available in git anymore.
+is not available in the commit history of this repository.
 
 
 License
