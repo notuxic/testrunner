@@ -335,8 +335,16 @@ impl OrdIoTest {
         'io_loop: loop {
             match &curr_io {
                 InputOutput::Input(input) => {
-                    stdin.write(&input.as_bytes())?;
-                    stdin.flush()?;
+                    // ignore ErrorKind::BrokenPipe, program may have already exited
+                    if let Err(e) =  || -> io::Result<()> {
+                        stdin.write(&input.as_bytes())?;
+                        stdin.flush()?;
+                        Ok(())
+                    }() {
+                        if e.kind() != io::ErrorKind::BrokenPipe {
+                            return Err(TestingError::IoError(e));
+                        }
+                    }
                 },
                 InputOutput::Output(_) => {
                     let mut output = String::with_capacity(self.io.iter().filter(|e| e.is_output()).fold(0, |acc, e| acc + e.get_ref().len()));
