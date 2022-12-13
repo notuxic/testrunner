@@ -220,6 +220,13 @@ impl OrdIoTest {
             };
             io_diff.push(diff_e);
         }
+        if let Some(io_e) = it_io.next() {
+            if let InputOutput::Output(output) = io_e {
+                len_ref_sum += output.len();
+                let (changeset, _) = diff_plaintext("", output, Duration::from_secs(timeout));
+                io_diff.push(IODiff::Output(changeset));
+            }
+        }
         if io_mismatch {
             return Err(TestingError::IOMismatch);
         }
@@ -423,6 +430,7 @@ impl OrdIoTest {
             let given_output;
 
             drop(stdin);
+            communicator = communicator.limit_time(std::cmp::max(timeout - (Instant::now() - starttime), Duration::from_millis(250)));
             let capture = communicator.read();
 
             match capture {
