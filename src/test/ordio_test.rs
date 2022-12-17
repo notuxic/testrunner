@@ -149,7 +149,12 @@ impl Test for OrdIoTest {
             }
         }).collect::<Vec<String>>().join("");
 
-        let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath, had_timeout)?;
+        let (mem_leaks, mem_errors) = if had_timeout {
+            (None, None)
+        }
+        else {
+            self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?
+        };
 
         Ok(Box::new(OrdIoTestresult {
             io_diff,

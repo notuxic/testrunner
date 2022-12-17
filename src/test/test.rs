@@ -103,13 +103,7 @@ pub trait Test : erased_serde::Serialize {
             && distance == 1.0 && add_distance == 1.0 && !had_timeout
     }
 
-    fn get_valgrind_result(&self, project_definition: &ProjectDefinition, options: &TestrunnerOptions, basedir: &str, vg_log_folder: &str, vg_filepath: &str, timeout: bool) -> Result<(Option<i32>, Option<i32>), TestingError> {
-        if timeout {
-            // if the process gets killed on timeout, then we might not have a complete
-            // valgrind log we can parse
-            return Ok((Some(-1), Some(-1)));
-        }
-
+    fn get_valgrind_result(&self, project_definition: &ProjectDefinition, options: &TestrunnerOptions, basedir: &str, vg_log_folder: &str, vg_filepath: &str) -> Result<(Option<i32>, Option<i32>), TestingError> {
         let meta = self.get_test_meta();
         let mem_leaks;
         let mem_errors;
@@ -121,14 +115,20 @@ pub trait Test : erased_serde::Serialize {
                     Err(_) => Ok(()),
                 };
             }
-            let valgrind = parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &meta.number))?;
+            (mem_leaks, mem_errors) = match parse_vg_log(&format!("{}/{}/{}/vg_log.txt", &basedir, &vg_log_folder, &meta.number)) {
+                Ok(valgrind) => (Some(valgrind.0), Some(valgrind.1)),
+                Err(TestingError::VgLogParseError(path)) => {
+                    eprintln!("Warning: failed parsing valgrind log: {}", path);
+                    (None, None)
+                },
+                Err(err) => {
+                    return Err(err);
+                },
+            };
 
             if cfg!(unix) && options.sudo.is_some() && meta.protected {
                 remove_dir_all(&format!("{}/{}/{}", &basedir, &vg_log_folder, &meta.number)).unwrap_or(());
             }
-
-            mem_leaks = Some(valgrind.0);
-            mem_errors = Some(valgrind.1);
         }
         else {
             mem_leaks = None;

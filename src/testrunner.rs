@@ -140,7 +140,15 @@ impl Testrunner {
                     }
 
                     if self.project_definition.use_valgrind.unwrap_or(true) {
-                        println!("  Memory usage errors: {}\n  Memory leaks: {}", tc.mem_errors().unwrap_or(-1), tc.mem_leaks().unwrap_or(-1));
+                        if tc.timeout() {
+                            println!("  Memory usage errors: n/a\n  Memory leaks: n/a");
+                        }
+                        else if !tc.mem_errors().is_some() || !tc.mem_leaks().is_some() {
+                            println!("  Memory usage errors: ?\n  Memory leaks: ?");
+                        }
+                        else {
+                            println!("  Memory usage errors: {}\n  Memory leaks: {}", tc.mem_errors().unwrap(), tc.mem_leaks().unwrap());
+                        }
                     }
 
                     acc.push(tc);

@@ -95,7 +95,12 @@ impl Test for IoTest {
 
         let passed = self.did_pass(self.exp_exit_code, exit_code, distance, add_distance, had_timeout);
 
-        let (mem_leaks, mem_errors) = self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath, had_timeout)?;
+        let (mem_leaks, mem_errors) = if had_timeout {
+            (None, None)
+        }
+        else {
+            self.get_valgrind_result(&project_definition, &options, &basedir, &vg_log_folder, &vg_filepath)?
+        };
 
         Ok(Box::new(IoTestresult {
             diff: changeset,
@@ -275,7 +280,7 @@ pub fn prepare_envvars(env_vars: Option<&Vec<String>>) -> Vec<(String, String)> 
 pub fn parse_vg_log(filepath: &String) -> Result<(i32, i32), TestingError> {
     let re = Regex::new(r"(?s)in use at exit: [0-9,]+ bytes? in (?P<leaks>[0-9,]+) blocks?.*ERROR SUMMARY: (?P<errors>[0-9,]+) errors? from [0-9,]+ contexts?")
         .unwrap();
-    let mut retvar = (-1, 1);
+    let mut retvar = (-1, -1);
     match read_to_string(filepath) {
         Ok(content) => match re.captures_iter(&content).last() {
             Some(cap) => {

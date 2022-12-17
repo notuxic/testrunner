@@ -345,17 +345,17 @@
 					%>
 				</td>
 				<td>
-					<% if self.project_definition.use_valgrind.unwrap_or(true) { %>
-					<%= tc.mem_errors().unwrap_or(-1) %>
+					<% if !self.project_definition.use_valgrind.unwrap_or(true) || tc.timeout() { %>
+					<i>n/a</i>
 					<% } else { %>
-					<i>N/A</i>
+					<%= tc.mem_errors().map(|e| e.to_string()).unwrap_or("?".to_owned()) %>
 					<% } %>
 				</td>
 				<td>
-					<% if self.project_definition.use_valgrind.unwrap_or(true) { %>
-					<%= tc.mem_leaks().unwrap_or(-1) %>
+					<% if !self.project_definition.use_valgrind.unwrap_or(true) || tc.timeout() { %>
+					<i>n/a</i>
 					<% } else { %>
-					<i>N/A</i>
+					<%= tc.mem_leaks().map(|e| e.to_string()).unwrap_or("?".to_owned()) %>
 					<% } %>
 				</td>
 				<td>

@@ -66,14 +66,23 @@
 			<tr>
 				<th>Exit Code</th>
 				<td>
-					expected: <span class="inline-code"><%= self.expected_exit_code.unwrap_or(-99) %></span>, got <span class="inline-code"><%= self.exit_code.unwrap_or(-99) %></span>
+					expected: <span class="inline-code"><%= self.expected_exit_code.unwrap_or(0) %></span>,
+					<% if self.exit_code.is_some() { %>
+					got: <span class="inline-code"><%= self.exit_code.unwrap() %></span>
+					<% } else { %>
+					got: <i>n/a</i>
+					<% } %>
 				</td>
 			</tr>
 			<% if project_definition.use_valgrind.unwrap_or(true) { %>
 			<tr>
 				<th>Memory Usage-Errors / Leaks</th>
 				<td>
-					<%= self.mem_errors.unwrap_or(-1) %> / <%= self.mem_leaks.unwrap_or(-1) %>
+					<% if self.timeout { %>
+					<i>n/a</i> / <i>n/a</i>
+					<% } else { %>
+					<%= self.mem_errors.map(|e| e.to_string()).unwrap_or("?".to_owned()) %> / <%= self.mem_leaks.map(|e| e.to_string()).unwrap_or("?".to_owned()) %>
+					<% } %>
 					<% if !(options.protected_mode && self.protected) { %>
 					(<a target="_blank" href="<%= self.mem_logfile %>">Open Log</a>)
 					<% } %>
