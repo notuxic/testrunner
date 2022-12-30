@@ -41,7 +41,7 @@ testrunner - a I/O-based testing tool for C and C++ programs
   Generates JSON report [default: testreport.json]
 
 
-== OVERVIEW
+== DESCRIPTION
 
 TODO
 

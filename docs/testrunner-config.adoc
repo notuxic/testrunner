@@ -5,17 +5,216 @@
 
 == NAME
 
-testrunner-config - configuring testcases for **testrunner**(1)
+testrunner-config - configuring testcases for testrunner(1)
 
 
 == SYNOPSIS
 
-TODO
+*test.toml*
 
 
 == DESCRIPTION
 
-TODO
+Testcases are configured in a _TOML_ configuration file.
+
+The *testrunner* will send configured inputs to the program to be tested, capturing its output and comparing it with a
+reference output.
+
+An additional file generated/modified by the program may be specified, which will also be compared with a reference file.
+
+Currently two types of testcases are supported:
+
+*IO*::
+  A simple input/output test. The entire input is sent upfront.
+
+*OrdIO*::
+  A pseudo-interactive input/output test. Output is continuously read, inputs are sent whenever a prompt gets detected in the output.
+
+Generally, the *OrdIO* testcase-type should be preferred, as it provides the *testrunner* with more information, which allows it display the input along with the generated output in the *testreport.html*. This makes the generated output easier to follow, and thus improves the readability of the testreport.
+However, for especially long testcases which include lots of inputs and outputs, the *OrdIO* testcase-type is considerably slower, so the *IO* testcase-type might be preferable in these cases.
+
+
+== SECTION - project_definition
+
+Every config-file must include the section *[project_definition]*.
+
+The following options are supported:
+
+*binary_path* (string)::
+  Path to the binary, which is to be tested.
+
+*makefile_path* (optional; string)::
+  Path to the _Makefile_, which shall be used for compiling the binary. If this option is not used, the binary has to be compiled before starting the *testrunner*.
+
+*make_targets* (optional; array of strings)::
+  A list of targets (or rather: command-line arguments) which shall be passed to _make_.
+
+*global_timeout* (optional; integer)::
+  The default timeout for testcases, in seconds. Defaults to 5 seconds.
+
+*use_valgrind* (optional; boolean)::
+  Enable/disable use of valgrind for detecting memory usage errors and leaks. Defaults to _true_.
+
+*valgrind_flags* (optional; array of strings)::
+  Override the flags passed to _valgrind_.
+
+*valgrind_log_folder* (optional; string)::
+  The the name of the directory containing the _valgrind_ logs. Defaults to _valgrind_logs_.
+
+*diff_table_width* (optional; integer)::
+  The the width of the _diff_ in *testreport.html*, in characters. Defaults to 80 characters.
+
+
+== SECTION - testcases - COMMON
+
+Testcases are specified using *\[[testcases]]* sections.
+
+The following options are supported by all testcase-types:
+
+*type* (string)::
+  The testcase-type. Either _IO_ or _OrdIO_.
+
+*name* (string)::
+  The name of the testcase.
+
+*description* (optional; string)::
+  A desciption of the testcase.
+
+*timeout* (optional; integer)::
+  The timeout for the testcase, in seconds. Defaults to the value of *global_timeout*.
+
+*protected* (optional; boolean)::
+  Marks a testcase as "protected". Only limited information about these testcases is shown in the *testreport.html* when running the testrunner in *protected-mode*. Defaults to _false_.
+
+*add_diff_mode* (optional; string)::
+  The diffing-mode for the additional file. May be either _text_ or _binary_. Defaults to _text_.
+
+*add_out_file* (optional; string)::
+  Path to the file generated/modified by the program, which is to be compared with the reference file.
+
+*add_exp_file* (optional; string)::
+  Path to the reference file, which is to be compared with the one generated/modified by the program.
+
+
+== SECTION - testcases - IO
+
+The following options are specific to the testcase-type _IO_:
+
+*in_file* (string)::
+  Path to the file containing the input.
+
+*exp_file* (string)::
+  Path to the file containing the reference output.
+
+*exp_exit_code* (optional; integer)::
+  Expected _exit-code_ of the program. Defaults to _0_.
+
+*argv* (optional; array of strings)::
+  A list of command-line arguments, which shall be passed to the program.
+
+*env_vars* (optional; array of strings)::
+  A list of environment variables, which shall be set for the program. Entries follow the format _NAME=VALUE_, the name of the variable may not include any _=_.
+
+
+== SECTION - testcases - OrdIO
+
+The following options are specific to the testcase-type _OrdIO_:
+
+*io_file* (string)::
+  Path to the *io_file* containing the input and reference output. The format of this file is specified in the next section.
+
+*io_prompt* (string)::
+  Whenever a output matches this regex, the next input will be sent.
+  All backslashes need to be escaped, for example use _\\s_ to match whitespace, or _\\\\_ to match a literal backslash.
+  The regex is case-insensitive and applied in multiline-mode, so _^_ and _$_ match the beginning and end of a line respectively.
+  See https://docs.rs/regex/latest/regex/#syntax for the syntax used. 
+  
+
+*exp_exit_code* (optional; integer)::
+  Expected _exit-code_ of the program. Defaults to _0_.
+
+*argv* (optional; array of strings)::
+  A list of command-line arguments, which shall be passed to the program.
+
+*env_vars* (optional; array of strings)::
+  A list of environment variables, which shall be set for the program. Entries follow the format _NAME=VALUE_, the name of the variable may not include any _=_.
+
+
+== FORMAT - io_file
+
+The *io_file* format combines input and output into a single file, using a line-based format.
+
+Each line has a prefix, followed by a single space. Available prefixes are:
+
+*<*::
+  An input, with a new-line at the end.
+
+*>*::
+  An output, with a new-line at the end.
+
+*?*::
+  An output, without a new-line at the end.
+
+*#*::
+  A comment. This line will be ignored by the *testrunner*.
+
+The format does not support any kind of escape-codes, everything has to be included literally.
+
+Example: ::
+----
+# a simple hello-world I/O, asking the user for her/his name
+? Enter your name: 
+< Tom
+> Hello, Tom!
+----
+
+
+== EXAMPLE
+
+----
+[project_definition]
+binary_path = "./test_me"
+makefile_path = "."
+make_targets = ["clean", "build"]
+
+[[testcases]]
+name = "missing args"
+description = "calls the program without required command-line arguments, testing error handling"
+type = "IO"
+in_file = "./tests/01/in"
+exp_file = "./tests/01/out"
+exp_exit_code = 1
+
+[[testcases]]
+name = "just quit"
+description = "immediately quit the program again"
+type = "OrdIO"
+io_file = "./tests/02/io"
+io_prompt = "^\\s*>\\s*$"
+argv = ["-f", "./tests/02/file_in"]
+
+[[testcases]]
+name = "all features"
+type = "OrdIO"
+io_file = "./tests/03/io"
+io_prompt = "^\\s*>\\s*$"
+argv = ["-f", "./tests/03/file_in"]
+env_vars = ["RAND_SEED=12345678"]
+timeout = 15
+protected = true
+
+[[testcases]]
+name = "save to file"
+type = "OrdIO"
+io_file = "./tests/04/io"
+io_prompt = "^\\s*>\\s*$"
+argv = ["-b", "-f", "./tests/04/file_in"]
+add_diff_mode = "binary"
+add_out_file = "./tests/04/file_out"
+add_exp_file = "./tests/04/file_exp"
+timeout = 10
+protected = true
+----
 
 
 == SEE ALSO
