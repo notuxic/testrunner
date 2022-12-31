@@ -1,3 +1,5 @@
+> This repository is an archive of the 2.0.0 release, the upstream repository can be found at: https://gitlab.tugraz.at/testrunner/testrunner
+
 Testrunner
 ==========
 
