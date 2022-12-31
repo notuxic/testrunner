@@ -58,9 +58,9 @@ See [BUILDING.md](./BUILDING.md) for various considerations regarding building t
 Documentation
 -------------
 
-See [testrunner.adoc](./testrunner.adoc) for command-line usage and a general overview.
+See [testrunner.adoc](./docs/testrunner.adoc) for command-line usage and a general overview.
 
-See [testrunner-config.adoc](./testrunner-config.adoc) for configuring testcases.
+See [testrunner-config.adoc](./docs/testrunner-config.adoc) for configuring testcases.
 
 
 Authors
