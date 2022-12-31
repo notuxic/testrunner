@@ -40,8 +40,34 @@ testrunner - a I/O-based testing tool for C and C++ programs
 *-j, --json-output* _<JSON_OUTPUT>_::
   Generates JSON report [default: testreport.json]
 
+*--sudo* _<USER>_::
+  Runs tested program as user _<USER>_
+
 
 == DESCRIPTION
+
+The *testrunner* requires a config-file specifying the testcases to be run. The name and/or path of this file
+may be set using *--config*, which defaults to _test.toml_.
+
+By default, the *testrunner* will generate a HTML testreport _testreport.html_ in the current directory.
+The option *--html-output* may be used to change the name and/or path of this file.
+
+For processing of the testresults using another program, a JSON testreport can be generated using *--json-output*.
+
+The option *--protected-mode* allows generating a restricted testreport. Details of testcases marked as _protected_
+will be omitted in the HTML testreport. The JSON testreport will always include all information.
+
+By default, the *testrunner* will run multiple testcases in parallel, depending on the number of logical CPU cores.
+The option *--jobs* may be used to manually set the number of testcases to run in parallel.
+
+The whitespace-hints in the HTML testreport may add a significant space-overhead; the option *--no-ws-hints*
+allows to disable these whitespace-hints to reduce the file size.
+
+The option *--sudo* may be used to run the tested program under another user.
+In this case, the *testrunner* itself must be run as _root_ to work properly.
+
+
+== Overview
 
 TODO
 

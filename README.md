@@ -1,7 +1,7 @@
 Testrunner
 ==========
 
-*Testrunner* is a input/output -based testing tool, written for courses teaching *C* and *C++*.
+*Testrunner* is a input/output-based testing tool, written for courses teaching *C* and *C++*.
 
 It aims to provide a comprehensive tool for checking programs for correctness in the context of
 teaching *C* and *C++* (correct program behaviour on *I/O*, compiler warnings, memory leaks, ...),
@@ -50,13 +50,15 @@ Planned features:
 Building
 --------
 
+*Testrunner* officially supports *Linux*, and may also work on other *unix-like* operating-systems.
+
 See [BUILDING.md](./BUILDING.md) for various considerations regarding building the project.
 
 
 Documentation
 -------------
 
-See [testrunner.adoc](./testrunner.adoc) for command-line options and a general overview.
+See [testrunner.adoc](./testrunner.adoc) for command-line usage and a general overview.
 
 See [testrunner-config.adoc](./testrunner-config.adoc) for configuring testcases.
 
