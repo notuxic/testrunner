@@ -67,9 +67,33 @@ The option *--sudo* may be used to run the tested program under another user.
 In this case, the *testrunner* itself must be run as _root_ to work properly.
 
 
-== Overview
+== OVERVIEW
 
-TODO
+*testrunner* is a input/output-based testing tool; it aims to provide a comprehensive tool for checking programs for correctness
+in the context of teaching _C_ and _C++_ (correct program behaviour on _I/O_, compiler warnings, memory leaks, ...),
+while also generating an easy-to-understand testreport.
+
+Testcases are configured in a _TOML_ configuration file, along with additional files containing input and reference output
+of the testcases. The configured input will be sent to the tested program, capturing its output and comparing it with the
+expected reference output. An additional file may be checked as well. +
+The programs exit-code is compared with an expected exit-code.
+
+_Valgrind_ may be used to detect memory usage errors and memory leaks in the tested program.
+
+The *testrunner* can compile a project using a _Makefile_, in which case it is also able to detect compiler warnings during
+compilation. Currently, parsing the output of _GCC_ and _Clang_ is supported; other compilers may work as well, as long as
+their output format is similar enough.
+
+Testresults are compiled into a HTML testreport. This testreport includes all information gathered by the *testrunner*,
+prepared in a user-friendly format aimed at less experienced users. +
+A summary provides an overview of all testresults; detailed results are provided for testcases not marked as _protected_. +
+The programs actual output and the expected output are shown in a two-way line-diff,
+including inline-diff-hints and whitespace-hints for easier detection of small differences in the output. +
+A _hexdump_-like format is used for the two-way diff of binary files.
+
+The testrunner is meant to be distributed to users along with public testcases for local testing.
+Using _protected-mode_, public and secret/private testcases may be tested on a central testsystem, providing the users
+only with basic information about the results of these secret/private testcases.
 
 
 == SEE ALSO

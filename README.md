@@ -5,7 +5,7 @@ Testrunner
 
 It aims to provide a comprehensive tool for checking programs for correctness in the context of
 teaching *C* and *C++* (correct program behaviour on *I/O*, compiler warnings, memory leaks, ...),
-while also generating a report that can be understood by less experienced users.
+while also generating a easy-to-understand testreport.
 
 
 Features
@@ -23,7 +23,7 @@ General features:
     - a two-way line-diff for output and text files, including inline-diff-hints and whitespace-hints,
     - a two-way binary-diff in a *hexdump*-like format for binary files,
     - the input sent to the program,
-    - the commandline used for running the program,
+    - the command-line used for running the program,
     - the programs exit-code,
     - other information, when using the respective feature (see bullet points below).
  - Generate a JSON report, for processing by other programs.
